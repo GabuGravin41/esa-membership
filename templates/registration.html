@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESA Membership Registration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        input, button {
+            margin: 5px 0;
+            padding: 10px;
+            width: 200px;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>ESA Membership Registration</h1>
+    <form id="registrationForm">
+        <input type="text" id="name" placeholder="Name" required />
+        <input type="email" id="email" placeholder="Email" required />
+        <input type="text" id="phone" placeholder="Phone Number" required />
+        <button type="submit">Generate Membership Code</button>
+    </form>
+    <div id="result"></div>
+    <div id="error" class="error"></div>
+    
+    <button id="countButton">Get Member Count</button>
+    <div id="memberCount"></div>
+
+    <script>
+        document.getElementById('registrationForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const phone = document.getElementById('phone').value;
+
+            fetch('/generate-code', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name, email, phone })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Email or phone number already registered.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('result').innerText = `Your Membership Code: ${data.code}`;
+                document.getElementById('error').innerText = ''; // Clear any previous error
+            })
+            .catch(error => {
+                document.getElementById('error').innerText = error.message;
+                console.error('Error:', error);
+            });
+        });
+
+        document.getElementById('countButton').addEventListener('click', function() {
+            fetch('/member-count')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('memberCount').innerText = `Total Members: ${data.member_count}`;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+</body>
+</html>
