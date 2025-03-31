@@ -178,7 +178,13 @@
                 })
             })
             .then(response => {
-                // Parse JSON first regardless of status
+                // Check if the response is JSON before parsing
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned non-JSON response. Please check server logs.');
+                }
+                
+                // Parse JSON
                 return response.json().then(data => {
                     // If not OK, throw error with the message from server
                     if (!response.ok) {
@@ -226,7 +232,14 @@
                 },
                 body: JSON.stringify({ identifier, code })
             })
-            .then(response => response.json())
+            .then(response => {
+                // Check if the response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned non-JSON response. Please check server logs.');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     // Show update fields and pre-fill with existing data
@@ -280,7 +293,14 @@
                     year 
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                // Check if the response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned non-JSON response. Please check server logs.');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     document.getElementById('update_result').innerText = 'Information updated successfully!';
@@ -299,12 +319,20 @@
 
         document.getElementById('countButton').addEventListener('click', function() {
             fetch('/member-count')
-            .then(response => response.json())
+            .then(response => {
+                // Check if the response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned non-JSON response. Please check server logs.');
+                }
+                return response.json();
+            })
             .then(data => {
                 document.getElementById('memberCount').innerText = `Total Members: ${data.member_count}`;
             })
             .catch(error => {
                 console.error('Error:', error);
+                document.getElementById('memberCount').innerText = 'Error loading count: ' + error.message;
             });
         });
     </script>

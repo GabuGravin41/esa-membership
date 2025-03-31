@@ -230,7 +230,20 @@
                         value: newValue
                     })
                 })
-                .then(response => response.json())
+                .then(response => {
+                    // Ensure we're getting a valid JSON response
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        return response.json().then(data => {
+                            if (!response.ok) {
+                                throw new Error(data.error || 'Update failed');
+                            }
+                            return data;
+                        });
+                    } else {
+                        throw new Error('Server returned non-JSON response. Please check server logs.');
+                    }
+                })
                 .then(data => {
                     if (data.success) {
                         editingCell.textContent = newValue || '-';
