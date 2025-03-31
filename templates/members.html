@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESA Membership List</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .toggle-edit {
+            padding: 8px 15px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .toggle-edit:hover {
+            background-color: #007B9A;
+        }
+        .toggle-edit.active {
+            background-color: #f44336;
+        }
+        .toggle-edit.active:hover {
+            background-color: #d32f2f;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .editable {
+            position: relative;
+            cursor: pointer;
+        }
+        .editable:hover::after {
+            content: '✏️';
+            position: absolute;
+            right: 5px;
+            opacity: 0.5;
+        }
+        .editable input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+        }
+        .save-btn, .cancel-btn {
+            padding: 5px 10px;
+            margin: 0 2px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .save-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .cancel-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        .edit-controls {
+            display: flex;
+            gap: 5px;
+            margin-top: 5px;
+        }
+        .back-btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .back-btn:hover {
+            background-color: #45a049;
+        }
+        .success-message {
+            color: green;
+            margin-left: 10px;
+            font-weight: bold;
+            display: none;
+        }
+        .error-message {
+            color: red;
+            margin-left: 10px;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>ESA Membership List</h1>
+    
+    <div class="controls">
+        <button id="toggleEdit" class="toggle-edit">Enable Editing</button>
+        <span id="successMessage" class="success-message">Update successful!</span>
+        <span id="errorMessage" class="error-message">Update failed!</span>
+    </div>
+    
+    <table id="membersTable">
+        <thead>
+            <tr>
+                {% for column in columns %}
+                <th>{{ column|title }}</th>
+                {% endfor %}
+                <th class="edit-column" style="display: none;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for member in members %}
+            <tr data-id="{{ member.id }}" data-email="{{ member.email }}" data-phone="{{ member.phone }}" data-code="{{ member.membership_code }}">
+                {% for column in columns %}
+                {% if column in ['id', 'membership_code'] %}
+                <td>{{ member.get(column, '-') }}</td>
+                {% else %}
+                <td class="editable" data-column="{{ column }}">{{ member.get(column, '-') }}</td>
+                {% endif %}
+                {% endfor %}
+                <td class="edit-column" style="display: none;">
+                    <div class="edit-controls">
+                        <button class="save-btn">Save</button>
+                        <button class="cancel-btn">Cancel</button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <a href="/" class="back-btn">Back to Registration</a>
+
+    <script>
+        // Toggle edit mode
+        let editMode = false;
+        const toggleBtn = document.getElementById('toggleEdit');
+        const editColumns = document.querySelectorAll('.edit-column');
+        const editableCells = document.querySelectorAll('.editable');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        
+        toggleBtn.addEventListener('click', function() {
+            editMode = !editMode;
+            
+            if (editMode) {
+                toggleBtn.textContent = 'Disable Editing';
+                toggleBtn.classList.add('active');
+                editColumns.forEach(col => col.style.display = 'table-cell');
+            } else {
+                toggleBtn.textContent = 'Enable Editing';
+                toggleBtn.classList.remove('active');
+                editColumns.forEach(col => col.style.display = 'none');
+                
+                // Reset any active editing
+                document.querySelectorAll('.editable.editing').forEach(cell => {
+                    cancelEdit(cell);
+                });
+            }
+        });
+        
+        // Handle cell click for editing
+        document.querySelectorAll('.editable').forEach(cell => {
+            cell.addEventListener('click', function() {
+                if (!editMode || this.classList.contains('editing')) return;
+                
+                const value = this.textContent.trim();
+                const column = this.dataset.column;
+                
+                this.classList.add('editing');
+                this.innerHTML = `<input type="text" value="${value === '-' ? '' : value}" data-original="${value}">`;
+                this.querySelector('input').focus();
+            });
+        });
+        
+        // Handle save button click
+        document.querySelectorAll('.save-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const row = this.closest('tr');
+                const editingCell = row.querySelector('.editing');
+                
+                if (!editingCell) return;
+                
+                const input = editingCell.querySelector('input');
+                const newValue = input.value.trim();
+                const column = editingCell.dataset.column;
+                const id = row.dataset.id;
+                const email = row.dataset.email;
+                const phone = row.dataset.phone;
+                const code = row.dataset.code;
+                
+                // Send update to server
+                fetch('/update-member-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        id: id,
+                        email: email,
+                        phone: phone,
+                        code: code,
+                        column: column,
+                        value: newValue
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        editingCell.textContent = newValue || '-';
+                        editingCell.classList.remove('editing');
+                        
+                        // Update data attributes if email or phone was changed
+                        if (column === 'email') row.dataset.email = newValue;
+                        if (column === 'phone') row.dataset.phone = newValue;
+                        
+                        // Show success message
+                        successMessage.style.display = 'inline';
+                        setTimeout(() => { successMessage.style.display = 'none'; }, 3000);
+                    } else {
+                        // Show error and revert
+                        errorMessage.textContent = data.error || 'Update failed!';
+                        errorMessage.style.display = 'inline';
+                        setTimeout(() => { errorMessage.style.display = 'none'; }, 3000);
+                        
+                        cancelEdit(editingCell);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    errorMessage.textContent = 'Network error!';
+                    errorMessage.style.display = 'inline';
+                    setTimeout(() => { errorMessage.style.display = 'none'; }, 3000);
+                    
+                    cancelEdit(editingCell);
+                });
+            });
+        });
+        
+        // Handle cancel button click
+        document.querySelectorAll('.cancel-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const row = this.closest('tr');
+                const editingCell = row.querySelector('.editing');
+                
+                if (editingCell) {
+                    cancelEdit(editingCell);
+                }
+            });
+        });
+        
+        // Helper function to cancel editing
+        function cancelEdit(cell) {
+            const input = cell.querySelector('input');
+            if (input) {
+                const originalValue = input.dataset.original;
+                cell.textContent = originalValue;
+            }
+            cell.classList.remove('editing');
+        }
+    </script>
+</body>
+</html> 

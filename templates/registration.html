@@ -3,65 +3,296 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESA Membership Registration</title>
+    <title>ESA Membership System</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
         }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            border-radius: 4px 4px 0 0;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 10px 12px;
+            transition: 0.3s;
+            font-size: 14px;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            animation: fadeEffect 1s;
+        }
+        @keyframes fadeEffect {
+            from {opacity: 0;}
+            to {opacity: 1;}
+        }
         form {
             margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            max-width: 400px;
         }
         input, button {
             margin: 5px 0;
             padding: 10px;
-            width: 200px;
+            width: 100%;
         }
         .error {
             color: red;
         }
+        .success {
+            color: green;
+        }
+        .action-buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .action-buttons button, .action-buttons a {
+            width: auto;
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .action-buttons button:hover, .action-buttons a:hover {
+            background-color: #45a049;
+        }
+        .view-members {
+            background-color: #008CBA !important;
+        }
+        .view-members:hover {
+            background-color: #007B9A !important;
+        }
     </style>
 </head>
 <body>
-    <h1>ESA Membership Registration</h1>
-    <form id="registrationForm">
-        <input type="text" id="name" placeholder="Name" required />
-        <input type="email" id="email" placeholder="Email" required />
-        <input type="text" id="phone" placeholder="Phone Number" required />
-        <button type="submit">Generate Membership Code</button>
-    </form>
-    <div id="result"></div>
-    <div id="error" class="error"></div>
+    <h1>ESA Membership System</h1>
     
-    <button id="countButton">Get Member Count</button>
+    <div class="tab">
+        <button class="tablinks active" onclick="openTab(event, 'Register')">Register</button>
+        <button class="tablinks" onclick="openTab(event, 'Update')">Update Information</button>
+    </div>
+
+    <div id="Register" class="tabcontent" style="display: block;">
+        <h2>New Member Registration</h2>
+        <form id="registrationForm">
+            <input type="text" id="name" placeholder="Name" required />
+            <input type="email" id="email" placeholder="Email" required />
+            <input type="text" id="phone" placeholder="Phone Number" required />
+            <input type="text" id="department" placeholder="Department (optional)" />
+            <input type="text" id="reg_number" placeholder="Registration Number (optional)" />
+            <input type="text" id="year" placeholder="Year (optional)" />
+            <button type="submit">Generate Membership Code</button>
+        </form>
+        <div id="result" class="success"></div>
+        <div id="error" class="error"></div>
+    </div>
+
+    <div id="Update" class="tabcontent">
+        <h2>Update Member Information</h2>
+        <form id="updateForm">
+            <div class="verification-section">
+                <input type="text" id="update_identifier" placeholder="Email or Phone Number" required />
+                <input type="text" id="update_code" placeholder="Your Membership Code" required />
+                <button type="button" id="verify_button">Verify Identity</button>
+            </div>
+            <div id="update_fields" style="display: none;">
+                <input type="text" id="update_name" placeholder="Name" />
+                <input type="text" id="update_email" placeholder="Email" />
+                <input type="text" id="update_phone" placeholder="Phone Number" />
+                <input type="text" id="update_department" placeholder="Department" />
+                <input type="text" id="update_reg_number" placeholder="Registration Number" />
+                <input type="text" id="update_year" placeholder="Year" />
+                <button type="submit">Update Information</button>
+            </div>
+        </form>
+        <div id="update_result" class="success"></div>
+        <div id="update_error" class="error"></div>
+    </div>
+    
+    <div class="action-buttons">
+        <button id="countButton">Get Member Count</button>
+        <a href="/members" class="view-members">View All Members</a>
+    </div>
     <div id="memberCount"></div>
 
     <script>
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
         document.getElementById('registrationForm').addEventListener('submit', function(event) {
             event.preventDefault();
             const name = document.getElementById('name').value;
             const email = document.getElementById('email').value;
             const phone = document.getElementById('phone').value;
+            const department = document.getElementById('department').value;
+            const reg_number = document.getElementById('reg_number').value;
+            const year = document.getElementById('year').value;
 
             fetch('/generate-code', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ name, email, phone })
+                body: JSON.stringify({ 
+                    name, 
+                    email, 
+                    phone, 
+                    department, 
+                    reg_number, 
+                    year 
+                })
             })
             .then(response => {
-                if (!response.ok) {
-                    throw new Error('Email or phone number already registered.');
-                }
-                return response.json();
+                // Parse JSON first regardless of status
+                return response.json().then(data => {
+                    // If not OK, throw error with the message from server
+                    if (!response.ok) {
+                        // Include the existing_code in the error if available
+                        if (data.existing_code) {
+                            throw new Error(`${data.error} Your membership code is: ${data.existing_code}`);
+                        } else {
+                            throw new Error(data.error || 'Registration failed');
+                        }
+                    }
+                    return data;
+                });
             })
             .then(data => {
-                document.getElementById('result').innerText = `Your Membership Code: ${data.code}`;
-                document.getElementById('error').innerText = ''; // Clear any previous error
+                // Only display membership code on success
+                if (data.success) {
+                    document.getElementById('result').innerText = `Your Membership Code: ${data.code}`;
+                    document.getElementById('error').innerText = ''; // Clear any previous error
+                    // Clear the form
+                    document.getElementById('registrationForm').reset();
+                }
             })
             .catch(error => {
+                // Clear any previous result
+                document.getElementById('result').innerText = '';
                 document.getElementById('error').innerText = error.message;
+                console.error('Error:', error);
+            });
+        });
+
+        // Verify identity for update
+        document.getElementById('verify_button').addEventListener('click', function() {
+            const identifier = document.getElementById('update_identifier').value;
+            const code = document.getElementById('update_code').value;
+
+            if (!identifier || !code) {
+                document.getElementById('update_error').innerText = 'Please enter both identifier and membership code';
+                return;
+            }
+
+            fetch('/verify-member', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ identifier, code })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show update fields and pre-fill with existing data
+                    document.getElementById('update_fields').style.display = 'block';
+                    document.getElementById('update_name').value = data.user.name || '';
+                    document.getElementById('update_email').value = data.user.email || '';
+                    document.getElementById('update_phone').value = data.user.phone || '';
+                    document.getElementById('update_department').value = data.user.department || '';
+                    document.getElementById('update_reg_number').value = data.user.reg_number || '';
+                    document.getElementById('update_year').value = data.user.year || '';
+                    document.getElementById('update_error').innerText = '';
+                    document.getElementById('update_result').innerText = 'Identity verified. You can now update your information.';
+                } else {
+                    document.getElementById('update_error').innerText = data.error || 'Verification failed';
+                    document.getElementById('update_result').innerText = '';
+                    document.getElementById('update_fields').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                document.getElementById('update_error').innerText = 'Error: ' + error.message;
+                document.getElementById('update_result').innerText = '';
+                console.error('Error:', error);
+            });
+        });
+
+        // Submit update form
+        document.getElementById('updateForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const identifier = document.getElementById('update_identifier').value;
+            const code = document.getElementById('update_code').value;
+            const name = document.getElementById('update_name').value;
+            const email = document.getElementById('update_email').value;
+            const phone = document.getElementById('update_phone').value;
+            const department = document.getElementById('update_department').value;
+            const reg_number = document.getElementById('update_reg_number').value;
+            const year = document.getElementById('update_year').value;
+
+            fetch('/update-member', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    identifier, 
+                    code, 
+                    name, 
+                    email, 
+                    phone, 
+                    department, 
+                    reg_number, 
+                    year 
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('update_result').innerText = 'Information updated successfully!';
+                    document.getElementById('update_error').innerText = '';
+                } else {
+                    document.getElementById('update_error').innerText = data.error || 'Update failed';
+                    document.getElementById('update_result').innerText = '';
+                }
+            })
+            .catch(error => {
+                document.getElementById('update_error').innerText = 'Error: ' + error.message;
+                document.getElementById('update_result').innerText = '';
                 console.error('Error:', error);
             });
         });
