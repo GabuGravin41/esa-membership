@@ -1,8 +1,32 @@
 from flask import Flask, request, jsonify, render_template
 import sqlite3
 import random
+import flask
 
 app = Flask(__name__)
+
+# Error handler for API routes
+@app.errorhandler(404)
+def not_found_error(error):
+    # Check if route is for an API endpoint
+    if request.path.startswith('/generate-code') or \
+       request.path.startswith('/verify-member') or \
+       request.path.startswith('/update-member') or \
+       request.path.startswith('/update-member-data') or \
+       request.path.startswith('/member-count'):
+        return jsonify({'success': False, 'error': 'Endpoint not found'}), 404
+    return render_template('error.html', error=error), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    # Check if route is for an API endpoint
+    if request.path.startswith('/generate-code') or \
+       request.path.startswith('/verify-member') or \
+       request.path.startswith('/update-member') or \
+       request.path.startswith('/update-member-data') or \
+       request.path.startswith('/member-count'):
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+    return render_template('error.html', error=error), 500
 
 # Initialize SQLite database
 def init_db():
@@ -54,56 +78,86 @@ def generate_membership_code():
 # Endpoint to generate membership code
 @app.route('/generate-code', methods=['POST'])
 def generate_code():
-    data = request.json
-    name = data['name']
-    email = data['email']
-    phone = data['phone']
-    # Get optional fields with default None if not provided
-    department = data.get('department')
-    reg_number = data.get('reg_number')
-    year = data.get('year')
-    
-    conn = sqlite3.connect('esa_membership.db')
-    cursor = conn.cursor()
+    try:
+        # Make sure we have a valid JSON request
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid request format - expecting JSON'
+            }), 400
+            
+        data = request.json
+        name = data['name']
+        email = data['email']
+        phone = data['phone']
+        # Get optional fields with default None if not provided
+        department = data.get('department')
+        reg_number = data.get('reg_number')
+        year = data.get('year')
+        
+        try:
+            conn = sqlite3.connect('esa_membership.db')
+            cursor = conn.cursor()
 
-    # Check for existing email or phone number
-    cursor.execute("SELECT membership_code FROM users WHERE email = ? OR phone = ?", (email, phone))
-    existing_user = cursor.fetchone()
-    if existing_user:
-        existing_code = existing_user[0]
-        conn.close()
-        # Return an error response with status code 400, but include the existing code
+            # Check for existing email or phone number
+            cursor.execute("SELECT membership_code FROM users WHERE email = ? OR phone = ?", (email, phone))
+            existing_user = cursor.fetchone()
+            if existing_user:
+                existing_code = existing_user[0]
+                conn.close()
+                # Return an error response with status code 400, but include the existing code
+                return jsonify({
+                    'error': 'Email or phone number already registered.',
+                    'existing_code': existing_code,
+                    'success': False
+                }), 400
+            
+            # At this point, we know the user is not a duplicate
+            
+            # Generate a new membership code
+            membership_code = generate_membership_code()
+
+            # Ensure the code is unique
+            while True:
+                cursor.execute("SELECT membership_code FROM users WHERE membership_code = ?", (membership_code,))
+                if cursor.fetchone() is None:
+                    break
+                membership_code = generate_membership_code()
+
+            # Insert user into database
+            cursor.execute(
+                "INSERT INTO users (name, email, phone, membership_code, department, reg_number, year) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (name, email, phone, membership_code, department, reg_number, year)
+            )
+            conn.commit()
+            conn.close()
+
+            # Return success response with the generated code
+            return jsonify({
+                'code': membership_code,
+                'success': True
+            })
+        except sqlite3.Error as e:
+            # Handle database errors
+            if conn:
+                conn.close()
+            return jsonify({
+                'success': False,
+                'error': f'Database error: {str(e)}'
+            }), 500
+            
+    except KeyError as e:
+        # Missing required field
         return jsonify({
-            'error': 'Email or phone number already registered.',
-            'existing_code': existing_code,
-            'success': False
+            'success': False,
+            'error': f'Missing required field: {str(e)}'
         }), 400
-    
-    # At this point, we know the user is not a duplicate
-    
-    # Generate a new membership code
-    membership_code = generate_membership_code()
-
-    # Ensure the code is unique
-    while True:
-        cursor.execute("SELECT membership_code FROM users WHERE membership_code = ?", (membership_code,))
-        if cursor.fetchone() is None:
-            break
-        membership_code = generate_membership_code()
-
-    # Insert user into database
-    cursor.execute(
-        "INSERT INTO users (name, email, phone, membership_code, department, reg_number, year) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (name, email, phone, membership_code, department, reg_number, year)
-    )
-    conn.commit()
-    conn.close()
-
-    # Return success response with the generated code
-    return jsonify({
-        'code': membership_code,
-        'success': True
-    })
+    except Exception as e:
+        # Catch any other exceptions
+        return jsonify({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }), 500
 
 # Endpoint to get the number of members
 @app.route('/member-count', methods=['GET'])
@@ -287,72 +341,138 @@ def update_member():
 # Endpoint to update member data from the members table
 @app.route('/update-member-data', methods=['POST'])
 def update_member_data():
-    data = request.json
-    id_value = data.get('id')
-    email = data.get('email')
-    phone = data.get('phone')
-    code = data.get('code')
-    column = data.get('column')
-    value = data.get('value')
-    
-    # Validate required fields
-    if not all([column, code]) or not any([id_value, email, phone]):
-        return jsonify({
-            'success': False,
-            'error': 'Missing required fields'
-        }), 400
-    
-    # Validate column name to prevent SQL injection
-    allowed_columns = ['name', 'email', 'phone', 'department', 'reg_number', 'year']
-    if column not in allowed_columns:
-        return jsonify({
-            'success': False,
-            'error': 'Invalid column name'
-        }), 400
-    
-    conn = sqlite3.connect('esa_membership.db')
-    cursor = conn.cursor()
-    
     try:
-        # Verify that the user exists
-        if id_value:
-            cursor.execute("SELECT id FROM users WHERE id = ? AND membership_code = ?", (id_value, code))
-        else:
-            cursor.execute("SELECT id FROM users WHERE (email = ? OR phone = ?) AND membership_code = ?", 
-                          (email, phone, code))
-        
-        user = cursor.fetchone()
-        if not user:
-            conn.close()
+        # Make sure we have a valid JSON request
+        if not request.is_json:
             return jsonify({
                 'success': False,
-                'error': 'User not found or invalid membership code'
-            }), 404
+                'error': 'Invalid request format - expecting JSON'
+            }), 400
+            
+        data = request.json
+        id_value = data.get('id')
+        email = data.get('email')
+        phone = data.get('phone')
+        code = data.get('code')
+        column = data.get('column')
+        value = data.get('value')
         
-        user_id = user[0]
+        # Validate required fields
+        if not all([column, code]) or not any([id_value, email, phone]):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields'
+            }), 400
         
-        # Special handling for email and phone to ensure uniqueness
-        if column in ['email', 'phone'] and value:
-            cursor.execute(f"SELECT id FROM users WHERE {column} = ? AND id != ?", (value, user_id))
-            if cursor.fetchone():
+        # Validate column name to prevent SQL injection
+        allowed_columns = ['name', 'email', 'phone', 'department', 'reg_number', 'year']
+        if column not in allowed_columns:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid column name'
+            }), 400
+        
+        conn = sqlite3.connect('esa_membership.db')
+        cursor = conn.cursor()
+        
+        # Verify that the user exists
+        try:
+            if id_value:
+                cursor.execute("SELECT id FROM users WHERE id = ? AND membership_code = ?", (id_value, code))
+            else:
+                cursor.execute("SELECT id FROM users WHERE (email = ? OR phone = ?) AND membership_code = ?", 
+                              (email, phone, code))
+            
+            user = cursor.fetchone()
+            if not user:
                 conn.close()
                 return jsonify({
                     'success': False,
-                    'error': f'This {column} is already registered to another user'
-                }), 400
+                    'error': 'User not found or invalid membership code'
+                }), 404
+            
+            user_id = user[0]
+            
+            # Special handling for email and phone to ensure uniqueness
+            if column in ['email', 'phone'] and value:
+                cursor.execute(f"SELECT id FROM users WHERE {column} = ? AND id != ?", (value, user_id))
+                if cursor.fetchone():
+                    conn.close()
+                    return jsonify({
+                        'success': False,
+                        'error': f'This {column} is already registered to another user'
+                    }), 400
+            
+            # Update the field
+            cursor.execute(f"UPDATE users SET {column} = ? WHERE id = ?", (value, user_id))
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Update successful'
+            })
+        except sqlite3.Error as e:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': f'Database error: {str(e)}'
+            }), 500
+            
+    except Exception as e:
+        # Catch any other exceptions
+        return jsonify({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }), 500
+
+# Debug info endpoint
+@app.route('/api/info', methods=['GET'])
+def api_info():
+    try:
+        # Get database info
+        conn = sqlite3.connect('esa_membership.db')
+        cursor = conn.cursor()
         
-        # Update the field
-        cursor.execute(f"UPDATE users SET {column} = ? WHERE id = ?", (value, user_id))
-        conn.commit()
+        # Check table structure
+        cursor.execute("PRAGMA table_info(users)")
+        columns = cursor.fetchall()
+        column_info = [{"cid": col[0], "name": col[1], "type": col[2], "notnull": col[3], 
+                        "default": col[4], "pk": col[5]} for col in columns]
+        
+        # Get row count
+        cursor.execute("SELECT COUNT(*) FROM users")
+        count = cursor.fetchone()[0]
+        
+        # Get sample data (first 3 rows)
+        cursor.execute("SELECT * FROM users LIMIT 3")
+        sample_data = cursor.fetchall()
+        # Anonymize data for privacy
+        anonymized_data = []
+        for row in sample_data:
+            sanitized_row = list(row)
+            # Replace actual values with length indicators
+            for i in range(len(sanitized_row)):
+                if sanitized_row[i] and isinstance(sanitized_row[i], str):
+                    sanitized_row[i] = f"<{len(sanitized_row[i])} chars>"
+            anonymized_data.append(sanitized_row)
+            
         conn.close()
         
         return jsonify({
             'success': True,
-            'message': 'Update successful'
+            'database': {
+                'table_structure': column_info,
+                'row_count': count,
+                'sample_format': anonymized_data
+            },
+            'flask_endpoints': [rule.rule for rule in app.url_map.iter_rules()],
+            'server_info': {
+                'flask_version': flask.__version__,
+                'sqlite_version': sqlite3.sqlite_version
+            }
         })
-        
     except Exception as e:
-        conn.close()
         return jsonify({
             'success': False,
             'error': str(e)
