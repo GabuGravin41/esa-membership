@@ -30,46 +30,91 @@ def internal_error(error):
 
 # Initialize SQLite database
 def init_db():
-    conn = sqlite3.connect('esa_membership.db')
-    cursor = conn.cursor()
-    
-    # Check if users table exists
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-    table_exists = cursor.fetchone()
-    
-    if not table_exists:
-        # Create table if it doesn't exist
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                email TEXT UNIQUE,
-                phone TEXT UNIQUE,
-                membership_code TEXT UNIQUE,
-                department TEXT,
-                reg_number TEXT,
-                year TEXT
-            )
-        ''')
-    else:
-        # Check if new columns exist, add them if they don't
+    """Initialize the SQLite database with the required schema."""
+    try:
+        print("Starting database initialization...")
+        
+        import os
+        db_path = 'esa_membership.db'
+        
+        # Make sure the database file exists and is writable
         try:
-            cursor.execute("SELECT department FROM users LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute("ALTER TABLE users ADD COLUMN department TEXT")
+            if not os.path.exists(db_path):
+                print(f"Database file does not exist, creating: {db_path}")
+                open(db_path, 'a').close()
             
-        try:
-            cursor.execute("SELECT reg_number FROM users LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute("ALTER TABLE users ADD COLUMN reg_number TEXT")
+            # Check file permissions
+            if not os.access(db_path, os.W_OK):
+                print(f"Database file is not writable! Changing permissions: {db_path}")
+                os.chmod(db_path, 0o666)  # Make writable
+        except Exception as e:
+            print(f"Error setting up database file: {e}")
+        
+        conn = sqlite3.connect(db_path)
+        print(f"Connected to database: {db_path}")
+        cursor = conn.cursor()
+        
+        # Check if users table exists
+        print("Checking if users table exists...")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+        table_exists = cursor.fetchone()
+        
+        if not table_exists:
+            # Create table if it doesn't exist
+            print("Creating users table...")
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    email TEXT UNIQUE,
+                    phone TEXT UNIQUE,
+                    membership_code TEXT UNIQUE,
+                    department TEXT,
+                    reg_number TEXT,
+                    year TEXT
+                )
+            ''')
+            print("Users table created successfully")
+        else:
+            print("Users table already exists, checking for missing columns...")
+            # Verify columns exist
+            column_checks = [
+                {"name": "department", "type": "TEXT"},
+                {"name": "reg_number", "type": "TEXT"},
+                {"name": "year", "type": "TEXT"}
+            ]
             
-        try:
-            cursor.execute("SELECT year FROM users LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute("ALTER TABLE users ADD COLUMN year TEXT")
-    
-    conn.commit()
-    conn.close()
+            for col in column_checks:
+                try:
+                    # Try to select from the column
+                    query = f"SELECT {col['name']} FROM users LIMIT 1"
+                    print(f"Checking column {col['name']} with query: {query}")
+                    cursor.execute(query)
+                    print(f"Column {col['name']} exists")
+                except sqlite3.OperationalError as e:
+                    # Column doesn't exist, add it
+                    print(f"Column {col['name']} is missing, adding it: {e}")
+                    add_query = f"ALTER TABLE users ADD COLUMN {col['name']} {col['type']}"
+                    print(f"Executing: {add_query}")
+                    cursor.execute(add_query)
+                    print(f"Column {col['name']} added successfully")
+        
+        # Check the final table structure
+        print("Final table structure:")
+        cursor.execute("PRAGMA table_info(users)")
+        columns = cursor.fetchall()
+        for col in columns:
+            print(f"- {col[1]} ({col[2]})")
+        
+        conn.commit()
+        print("Database committed")
+        conn.close()
+        print("Database connection closed")
+    except Exception as e:
+        print(f"⚠️ Database initialization error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 # Function to generate unique membership code
 def generate_membership_code():
@@ -470,6 +515,68 @@ def api_info():
             'server_info': {
                 'flask_version': flask.__version__,
                 'sqlite_version': sqlite3.sqlite_version
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# Database health-check endpoint
+@app.route('/api/db-health', methods=['GET'])
+def db_health():
+    try:
+        import os, time
+        db_path = 'esa_membership.db'
+        
+        # Get file information
+        file_exists = os.path.exists(db_path)
+        file_size = os.path.getsize(db_path) if file_exists else 0
+        file_permissions = oct(os.stat(db_path).st_mode)[-3:] if file_exists else "N/A"
+        
+        # Test database connection
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Check schema
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        # Count users
+        cursor.execute("SELECT COUNT(*) FROM users")
+        user_count = cursor.fetchone()[0]
+        
+        # Write a test value to verify persistence
+        test_key = f"test_{int(time.time())}"
+        test_value = f"value_{int(time.time())}"
+        
+        try:
+            # Try to create a test table if it doesn't exist
+            cursor.execute("CREATE TABLE IF NOT EXISTS db_tests (key TEXT PRIMARY KEY, value TEXT, timestamp INTEGER)")
+            cursor.execute("INSERT INTO db_tests (key, value, timestamp) VALUES (?, ?, ?)", 
+                          (test_key, test_value, int(time.time())))
+            conn.commit()
+            
+            # Read back the last 5 test values
+            cursor.execute("SELECT key, value, timestamp FROM db_tests ORDER BY timestamp DESC LIMIT 5")
+            test_values = [{"key": row[0], "value": row[1], "timestamp": row[2]} for row in cursor.fetchall()]
+        except Exception as e:
+            test_values = [{"error": str(e)}]
+            
+        conn.close()
+        
+        # Return all the collected information
+        return jsonify({
+            'success': True,
+            'database': {
+                'file_exists': file_exists,
+                'file_size_bytes': file_size,
+                'file_permissions': file_permissions,
+                'absolute_path': os.path.abspath(db_path),
+                'columns': columns,
+                'user_count': user_count,
+                'persistence_tests': test_values
             }
         })
     except Exception as e:
