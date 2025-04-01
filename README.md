@@ -1,59 +1,92 @@
-# ESA Membership System
+# ESA Membership Registration Application
 
-A web-based membership management system for ESA (Engineering Students Association) that allows:
-- Generating unique membership codes for new members
-- Preventing duplicate registrations
-- Displaying existing membership codes for returning members
-- Viewing all members in a spreadsheet-like interface
-- Inline editing of member information
-- Tracking additional metadata (department, registration number, year)
-
-## Installation
-
-1. Clone this repository:
-```bash
-git clone https://github.com/GabuGravin41/esa-membership.git
-cd esa-membership
-```
-
-2. Create a virtual environment (optional but recommended):
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install the required packages:
-```bash
-pip install -r requirements.txt
-```
-
-## Running the Application
-
-Start the Flask application:
-```bash
-python app.py
-```
-
-The application will be available at http://127.0.0.1:5000/
+A Flask-based web application for managing ESA memberships, built for Kenyatta University Engineering Students Association.
 
 ## Features
 
-- **Member Registration**: Register new members with name, email, and phone number
-- **Unique Membership Codes**: Automatically generates and assigns unique ESA membership codes
-- **Duplicate Detection**: Prevents duplicate registrations and shows existing membership codes
-- **Member Dashboard**: View all members in a spreadsheet-like interface
-- **Inline Editing**: Edit member information directly in the members table
-- **Database Migration**: Automatic handling of database schema changes
-- **Data Validation**: Ensures data integrity and prevents conflicts
+- Membership code generation
+- Member verification
+- Member information management
+- Member database access and administration
 
-## API Endpoints
+## Setup and Installation
 
-- `POST /generate-code`: Register a new member and generate membership code
-- `GET /member-count`: Get the total number of registered members
-- `GET /members`: View all members in a spreadsheet-like interface
-- `POST /update-member-data`: Update member information via inline editing
-- `GET /migrate-db`: Manually trigger database migration (admin only)
+### Prerequisites
 
-## Database
+- Python 3.8+
+- PostgreSQL database
 
-The application uses SQLite for data storage. The database file (`esa_membership.db`) is created automatically when the application runs for the first time.
+### Local Development Setup
+
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd esa-membership
+   ```
+
+2. Create a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Set up a local PostgreSQL database:
+   ```bash
+   # Create a PostgreSQL database
+   createdb esa_membership
+   ```
+
+5. Update the database connection settings in `app.py` if needed.
+
+6. Run the application:
+   ```bash
+   python app.py
+   ```
+
+The application will be available at http://localhost:5000
+
+### Deployment on Render
+
+1. Create a new Web Service on Render.
+2. Link your GitHub repository.
+3. Use the following settings:
+   - Name: `esa-membership`
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `bash render_start.sh`
+   
+4. Create a PostgreSQL database on Render:
+   - Go to "New" > "PostgreSQL"
+   - Name: `esa-membership-db`
+   - Database: `esa_membership`
+   - User: `esa_user`
+   - Select the Free plan
+
+5. Link the database to your web service:
+   - Go to your web service
+   - Navigate to Environment
+   - Add environment variable:
+     - Key: `DATABASE_URL`
+     - Value: The Internal Database URL from your PostgreSQL service
+
+## Application Structure
+
+- `app.py`: Main application file
+- `templates/`: HTML templates
+- `static/`: Static files (CSS, JS)
+- `render_start.sh`: Script for starting the application on Render
+
+## Contributing
+
+1. Fork the repository
+2. Create a new branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.
