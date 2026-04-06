@@ -75,6 +75,10 @@ Phone: +254712345679
 
             <section id="member-list" class="tab-panel">
                 <h3>Member List</h3>
+                <div class="bulk-actions">
+                    <label><input type="checkbox" id="select-all"> Select all</label>
+                    <button id="bulk-delete-btn" disabled>Delete Selected</button>
+                </div>
                 <div id="members"></div>
             </section>
 
@@ -92,6 +96,24 @@ Phone: +254712345679
             </section>
         </div>
     </main>
+
+    <!-- Confirmation modal -->
+    <div id="confirm-modal" class="modal" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+            <h4 id="confirm-title">Confirm</h4>
+            <p id="confirm-message"></p>
+            <div class="modal-actions">
+                <button id="confirm-cancel">Cancel</button>
+                <button id="confirm-ok" class="confirm-ok">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Undo snackbar -->
+    <div id="undo-snackbar" class="snackbar" aria-live="polite">
+        <span id="undo-message"></span>
+        <button id="undo-btn">Undo</button>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="script.js"></script>

@@ -139,7 +139,10 @@ function loadMembers() {
         return `
         <div class="member-card">
             <div style="display:flex;justify-content:space-between;align-items:center">
-                <h4>${displayName} (${memberNumberDisplay})</h4>
+                <div style="display:flex;align-items:center;gap:10px">
+                    <input type="checkbox" class="select-checkbox" data-member-number="${memberNumberDisplay}" aria-label="Select ${displayName}">
+                    <h4>${displayName} (${memberNumberDisplay})</h4>
+                </div>
                 <button class="delete-btn" data-member-number="${memberNumberDisplay}" title="Delete member">Delete</button>
             </div>
             <p><strong>Email:</strong> ${member.email}</p>
@@ -152,13 +155,42 @@ function loadMembers() {
     `;
     }).join('');
 
-    // Wire delete buttons after rendering
+    // Wire delete buttons after rendering (uses modal)
     document.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const memberNumber = btn.dataset.memberNumber;
-            deleteMember(memberNumber);
+            showConfirmModal(`Delete member ${memberNumber}? This action cannot be undone.`, () => performSoftDelete([memberNumber]));
         });
     });
+
+    // Wire selection checkboxes
+    document.querySelectorAll('.select-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateBulkControls);
+    });
+
+    // Wire select-all
+    const selectAll = document.getElementById('select-all');
+    if (selectAll) {
+        selectAll.checked = false;
+        selectAll.addEventListener('change', () => {
+            const checked = selectAll.checked;
+            document.querySelectorAll('.select-checkbox').forEach(cb => cb.checked = checked);
+            updateBulkControls();
+        });
+    }
+
+    const bulkBtn = document.getElementById('bulk-delete-btn');
+    if (bulkBtn) {
+        bulkBtn.disabled = true;
+        bulkBtn.addEventListener('click', () => {
+            const selected = Array.from(document.querySelectorAll('.select-checkbox:checked')).map(cb => cb.dataset.memberNumber);
+            if (selected.length === 0) return;
+            showConfirmModal(`Delete ${selected.length} selected members? This action cannot be undone.`, () => performSoftDelete(selected));
+        });
+    }
+
+    // Check for pending undo on load
+    checkPendingUndo();
 }
 
 function deleteMember(memberNumber) {
@@ -511,4 +543,111 @@ function downloadFile(content, filename, mimeType) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+// Bulk controls helpers and undo functionality
+function updateBulkControls() {
+    const selected = document.querySelectorAll('.select-checkbox:checked').length;
+    const bulkBtn = document.getElementById('bulk-delete-btn');
+    if (bulkBtn) bulkBtn.disabled = selected === 0;
+    const selectAll = document.getElementById('select-all');
+    if (selectAll) {
+        const total = document.querySelectorAll('.select-checkbox').length;
+        selectAll.checked = total > 0 && selected === total;
+    }
+}
+
+// Confirmation modal control
+let _pendingConfirm = null;
+function showConfirmModal(message, onConfirm) {
+    const modal = document.getElementById('confirm-modal');
+    const msg = document.getElementById('confirm-message');
+    const ok = document.getElementById('confirm-ok');
+    const cancel = document.getElementById('confirm-cancel');
+    msg.textContent = message;
+    modal.setAttribute('aria-hidden', 'false');
+    _pendingConfirm = onConfirm;
+
+    const done = () => {
+        modal.setAttribute('aria-hidden', 'true');
+        ok.removeEventListener('click', onOk);
+        cancel.removeEventListener('click', onCancel);
+        _pendingConfirm = null;
+    };
+    const onOk = () => { if (_pendingConfirm) _pendingConfirm(); done(); };
+    const onCancel = () => { done(); };
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+}
+
+// Soft-delete with undo
+function performSoftDelete(memberNumbers) {
+    if (!Array.isArray(memberNumbers) || memberNumbers.length === 0) return;
+    const members = getMembers();
+    const toDelete = members.filter(m => memberNumbers.includes(m.memberNumber));
+    if (toDelete.length === 0) return;
+
+    const remaining = members.filter(m => !memberNumbers.includes(m.memberNumber));
+    saveMembers(remaining);
+
+    // Save last-deleted to localStorage with expiry
+    const expiry = Date.now() + 8000; // 8 seconds to undo
+    localStorage.setItem('esa-last-deleted', JSON.stringify({ members: toDelete, expiry }));
+    loadMembers();
+    showUndoSnackbar(`${toDelete.length} member(s) deleted.`, 8000);
+    schedulePendingUndoExpiry();
+}
+
+function schedulePendingUndoExpiry() {
+    const raw = localStorage.getItem('esa-last-deleted');
+    if (!raw) return;
+    let obj;
+    try { obj = JSON.parse(raw); } catch { localStorage.removeItem('esa-last-deleted'); return; }
+    const ms = obj.expiry - Date.now();
+    if (ms <= 0) { localStorage.removeItem('esa-last-deleted'); hideUndoSnackbar(); return; }
+    if (window._esaUndoTimer) clearTimeout(window._esaUndoTimer);
+    window._esaUndoTimer = setTimeout(() => {
+        localStorage.removeItem('esa-last-deleted');
+        hideUndoSnackbar();
+    }, ms);
+}
+
+function checkPendingUndo() {
+    const raw = localStorage.getItem('esa-last-deleted');
+    if (!raw) return;
+    let obj;
+    try { obj = JSON.parse(raw); } catch { localStorage.removeItem('esa-last-deleted'); return; }
+    const ms = obj.expiry - Date.now();
+    if (ms <= 0) { localStorage.removeItem('esa-last-deleted'); return; }
+    showUndoSnackbar(`${obj.members.length} member(s) deleted.`, ms);
+    schedulePendingUndoExpiry();
+}
+
+function showUndoSnackbar(message, durationMs) {
+    const sb = document.getElementById('undo-snackbar');
+    const msg = document.getElementById('undo-message');
+    const btn = document.getElementById('undo-btn');
+    msg.textContent = message;
+    sb.style.display = 'flex';
+    btn.onclick = () => { undoDelete(); };
+}
+
+function hideUndoSnackbar() {
+    const sb = document.getElementById('undo-snackbar');
+    if (sb) sb.style.display = 'none';
+}
+
+function undoDelete() {
+    const raw = localStorage.getItem('esa-last-deleted');
+    if (!raw) return;
+    let obj;
+    try { obj = JSON.parse(raw); } catch { localStorage.removeItem('esa-last-deleted'); hideUndoSnackbar(); return; }
+    const members = getMembers();
+    const merged = [...members, ...obj.members];
+    saveMembers(merged);
+    localStorage.removeItem('esa-last-deleted');
+    if (window._esaUndoTimer) clearTimeout(window._esaUndoTimer);
+    hideUndoSnackbar();
+    initMemberCounter();
+    loadMembers();
 }
