@@ -72,6 +72,12 @@ Member numbers are generated as ESA-KU-XXXX where XXXX is a 4-digit sequential n
 
 - XLSX library from CDN for Excel export
 
-## Browser Compatibility
+## Deployment
 
-Works in modern browsers with localStorage support.
+This is a static web application that can be deployed to any static hosting service. See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
+
+**Quick Deploy Options:**
+- **GitHub Pages** (Free, easiest)
+- **Netlify** (Free, drag & drop)
+- **Vercel** (Free, git integration)
+- **Render** (Free static hosting)
