@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESA-KU Membership Manager</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>Engineering Students Association - Kenyatta University</h1>
+        <h2>Membership Manager</h2>
+    </header>
+
+    <main>
+        <div class="tabs">
+            <button class="tab-button active" data-tab="add-member">Add Member</button>
+            <button class="tab-button" data-tab="bulk-import">Bulk Import</button>
+            <button class="tab-button" data-tab="member-list">Member List</button>
+            <button class="tab-button" data-tab="export-import">Data Management</button>
+        </div>
+
+        <div class="tab-content">
+            <section id="add-member" class="tab-panel active">
+                <h3>Add New Member</h3>
+                <form id="member-form">
+                    <label for="name">Full Name:</label>
+                    <input type="text" id="name" required>
+
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" required>
+
+                    <label for="student-id">Student ID:</label>
+                    <input type="text" id="student-id" required>
+
+                    <label for="department">Department:</label>
+                    <input type="text" id="department" required>
+
+                    <label for="year">Year of Study:</label>
+                    <select id="year" required>
+                        <option value="">Select Year</option>
+                        <option value="1">1st Year</option>
+                        <option value="2">2nd Year</option>
+                        <option value="3">3rd Year</option>
+                        <option value="4">4th Year</option>
+                        <option value="5">5th Year</option>
+                    </select>
+
+                    <label for="phone">Phone (Optional):</label>
+                    <input type="tel" id="phone">
+
+                    <button type="submit">Add Member</button>
+                </form>
+            </section>
+
+            <section id="bulk-import" class="tab-panel">
+                <h3>Bulk Import Members</h3>
+                <p>Paste member details in numbered list format or key:value format. Example:</p>
+                <pre>
+1. John Doe
+Email: john@example.com
+Admission No: J174/12345/2025
+Phone: +254712345678
+
+2. Jane Smith
+Email: jane@example.com
+Admission No: J174/12346/2025
+Phone: +254712345679
+                </pre>
+                <textarea id="bulk-data" rows="10" placeholder="Paste your member data here..."></textarea>
+                <br>
+                <button id="bulk-add">Add Bulk Members</button>
+                <div id="bulk-status"></div>
+            </section>
+
+            <section id="member-list" class="tab-panel">
+                <h3>Member List</h3>
+                <div id="members"></div>
+            </section>
+
+            <section id="export-import" class="tab-panel">
+                <h3>Data Management</h3>
+                <button id="quick-backup">Quick Backup (JSON)</button>
+                <button id="export-csv">Export as CSV</button>
+                <button id="export-json">Export as JSON</button>
+                <button id="export-xlsx">Export as XLSX</button>
+                <br>
+                <label for="import-file">Import Data:</label>
+                <input type="file" id="import-file" accept=".json,.csv">
+                <button id="import-btn">Import</button>
+                <div id="backup-status"></div>
+            </section>
+        </div>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

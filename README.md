@@ -1,92 +1,77 @@
-# ESA Membership Registration Application
+# ESA-KU Membership Manager
 
-A Flask-based web application for managing ESA memberships, built for Kenyatta University Engineering Students Association.
+A static web application for managing Engineering Students Association - Kenyatta University members.
 
 ## Features
 
-- Membership code generation
-- Member verification
-- Member information management
-- Member database access and administration
+- Add new members with auto-generated member numbers
+- **Bulk import** - Paste multiple members at once in key:value format
+- Store member data locally in browser storage
+- Export data as CSV, JSON, or XLSX
+- Quick backup with timestamp
+- Import data from JSON or CSV files
+- Duplicate prevention (by email and student ID)
 
-## Setup and Installation
+## How to Use
 
-### Prerequisites
+1. Open `index.html` in a web browser
+2. **Add Single Member**: Fill the form and click "Add Member"
+3. **Bulk Import**: Paste member data in the bulk import section using key:value format
+4. View members in the list below
+5. Export data using the export buttons
+6. Save the exported files to ESA email for backup
+7. To restore data, use the import function with a previously exported JSON or CSV file
 
-- Python 3.8+
-- PostgreSQL database
+## Bulk Import Format
 
-### Local Development Setup
+The system supports two formats:
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd esa-membership
-   ```
+**Format 1: Numbered List (Recommended for WhatsApp data)**
+```
+1. John Doe
+Email: john@example.com
+Admission No: J174/12345/2025
+Phone: +254712345678
 
-2. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+2. Jane Smith
+Email: jane@example.com
+Admission No: J174/12346/2025
+Phone: +254712345679
+```
 
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+**Format 2: Key:Value pairs**
+```
+name: John Doe
+email: john@example.com
+student_id: J174/12345/2025
+department: Computer Science
+year: 2
+phone: +254712345678
+```
 
-4. Set up a local PostgreSQL database:
-   ```bash
-   # Create a PostgreSQL database
-   createdb esa_membership
-   ```
+## Member Number Format
 
-5. Update the database connection settings in `app.py` if needed.
+Member numbers are generated as ESA-KU-XXXX where XXXX is a 4-digit sequential number.
 
-6. Run the application:
-   ```bash
-   python app.py
-   ```
+## Data Storage & Safety
 
-The application will be available at http://localhost:5000
+- Data stored in browser localStorage
+- Clear browser data will delete all members
+- **Always export regularly for backup**
+- Use Quick Backup for timestamped JSON files
+- Import JSON files to restore on new devices
+- No external services or costs involved
 
-### Deployment on Render
+## Files
 
-1. Create a new Web Service on Render.
-2. Link your GitHub repository.
-3. Use the following settings:
-   - Name: `esa-membership`
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `bash render_start.sh`
-   
-4. Create a PostgreSQL database on Render:
-   - Go to "New" > "PostgreSQL"
-   - Name: `esa-membership-db`
-   - Database: `esa_membership`
-   - User: `esa_user`
-   - Select the Free plan
+- `index.html` - Main HTML file
+- `styles.css` - Styling
+- `script.js` - JavaScript logic
 
-5. Link the database to your web service:
-   - Go to your web service
-   - Navigate to Environment
-   - Add environment variable:
-     - Key: `DATABASE_URL`
-     - Value: The Internal Database URL from your PostgreSQL service
+## Dependencies
 
-## Application Structure
+- XLSX library from CDN for Excel export
 
-- `app.py`: Main application file
-- `templates/`: HTML templates
-- `static/`: Static files (CSS, JS)
-- `render_start.sh`: Script for starting the application on Render
+## Browser Compatibility
 
-## Contributing
-
-1. Fork the repository
-2. Create a new branch
-3. Make your changes
-4. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License.
+Works in modern browsers with localStorage support.
