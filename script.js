@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('bulk-add').addEventListener('click', bulkAddMembers);
     document.getElementById('quick-backup').addEventListener('click', quickBackup);
     
+    // Initialize persistent member counter so member numbers are unique
+    initMemberCounter();
     // Tab functionality
     const tabButtons = document.querySelectorAll('.tab-button');
     tabButtons.forEach(button => {
@@ -43,10 +45,31 @@ function saveMembers(members) {
     localStorage.setItem('esa-members', JSON.stringify(members));
 }
 
-function generateMemberNumber() {
+function initMemberCounter() {
     const members = getMembers();
-    const lastNumber = members.length > 0 ? Math.max(...members.map(m => parseInt(m.memberNumber.split('-')[2]))) : 0;
-    return `ESA-KU-${String(lastNumber + 1).padStart(4, '0')}`;
+    let max = 0;
+    members.forEach(m => {
+        if (m && m.memberNumber) {
+            const match = String(m.memberNumber).match(/ESA-KU-(\d+)/);
+            if (match) {
+                const n = parseInt(match[1], 10);
+                if (!isNaN(n) && n > max) max = n;
+            }
+        }
+    });
+
+    const stored = parseInt(localStorage.getItem('esa-member-counter') || '0', 10);
+    if (isNaN(stored) || stored < max) {
+        localStorage.setItem('esa-member-counter', String(max));
+    }
+}
+
+function generateMemberNumber() {
+    let counter = parseInt(localStorage.getItem('esa-member-counter') || '0', 10);
+    if (isNaN(counter)) counter = 0;
+    counter += 1;
+    localStorage.setItem('esa-member-counter', String(counter));
+    return `ESA-KU-${String(counter).padStart(4, '0')}`;
 }
 
 function addMember(e) {
@@ -85,6 +108,7 @@ function addMember(e) {
     
     members.push(newMember);
     saveMembers(members);
+    initMemberCounter();
     
     document.getElementById('member-form').reset();
     loadMembers();
@@ -101,17 +125,58 @@ function loadMembers() {
         return;
     }
     
-    membersDiv.innerHTML = members.map(member => `
+    membersDiv.innerHTML = members.map(member => {
+        const displayName = String(member.name || '').replace(/\s*\(ESA-KU-\d+\)\s*/,'').trim();
+        const memberNumberDisplay = member.memberNumber || 'Unassigned';
+        let yearText = member.year || '';
+        const y = parseInt(yearText, 10);
+        if (!isNaN(y)) {
+            yearText = `${y}${y == 1 ? 'st' : y == 2 ? 'nd' : y == 3 ? 'rd' : 'th'} Year`;
+        } else if (yearText) {
+            yearText = `${yearText} Year`;
+        }
+
+        return `
         <div class="member-card">
-            <h4>${member.name} (${member.memberNumber})</h4>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <h4>${displayName} (${memberNumberDisplay})</h4>
+                <button class="delete-btn" data-member-number="${memberNumberDisplay}" title="Delete member">Delete</button>
+            </div>
             <p><strong>Email:</strong> ${member.email}</p>
             <p><strong>Student ID:</strong> ${member.studentId}</p>
             <p><strong>Department:</strong> ${member.department}</p>
-            <p><strong>Year:</strong> ${member.year}${member.year == 1 ? 'st' : member.year == 2 ? 'nd' : member.year == 3 ? 'rd' : 'th'} Year</p>
+            <p><strong>Year:</strong> ${yearText}</p>
             ${member.phone ? `<p><strong>Phone:</strong> ${member.phone}</p>` : ''}
             <p><strong>Date Added:</strong> ${new Date(member.dateAdded).toLocaleDateString()}</p>
         </div>
-    `).join('');
+    `;
+    }).join('');
+
+    // Wire delete buttons after rendering
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const memberNumber = btn.dataset.memberNumber;
+            deleteMember(memberNumber);
+        });
+    });
+}
+
+function deleteMember(memberNumber) {
+    if (!memberNumber) return;
+    const ok = confirm(`Delete member ${memberNumber}? This action cannot be undone.`);
+    if (!ok) return;
+
+    const members = getMembers();
+    const updated = members.filter(m => m.memberNumber !== memberNumber);
+    if (updated.length === members.length) {
+        alert('Member not found.');
+        return;
+    }
+    saveMembers(updated);
+    // keep counter intact (do not decrement) but ensure counter stays at least max
+    initMemberCounter();
+    loadMembers();
+    alert(`Member ${memberNumber} deleted.`);
 }
 
 function exportCSV() {
@@ -240,6 +305,7 @@ function importData() {
             
             const updatedMembers = [...existingMembers, ...newMembers];
             saveMembers(updatedMembers);
+            initMemberCounter();
             
             loadMembers();
             alert(`Successfully imported ${newMembers.length} new members.`);
@@ -394,6 +460,7 @@ function bulkAddMembers() {
         // Add to existing members
         const updatedMembers = [...existingMembers, ...newMembers];
         saveMembers(updatedMembers);
+        initMemberCounter();
         
         loadMembers();
         
