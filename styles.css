@@ -6,19 +6,69 @@ body {
     background-color: #f5f5f5;
 }
 
+/* ===================== HEADER ===================== */
 header {
-    text-align: center;
     background-color: #0047AB;
     color: white;
-    padding: 20px;
+    padding: 16px 20px;
     border-radius: 5px;
     margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
 }
+
+.header-main { text-align: left; }
 
 h1, h2, h3 {
     margin: 0;
 }
+h1 { font-size: 1.2em; }
+h2 { font-size: 0.95em; font-weight: normal; opacity: 0.9; }
 
+/* Auth bar */
+.auth-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+.auth-email {
+    font-size: 0.85em;
+    color: #cce0ff;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.auth-btn {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.5);
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    margin: 0;
+    transition: background 0.2s;
+}
+.auth-btn:hover { background: rgba(255,255,255,0.28); }
+
+/* ===================== AUTH-GATED VISIBILITY ===================== */
+/* Elements with data-auth are hidden when not logged in */
+body:not(.logged-in) [data-auth] { display: none !important; }
+/* Elements with data-no-auth are hidden when logged in */
+body.logged-in [data-no-auth] { display: none !important; }
+
+/* Make "Member List" tab always visible regardless of auth, hide others when logged out */
+body:not(.logged-in) .tab-button[data-tab="add-member"],
+body:not(.logged-in) .tab-button[data-tab="bulk-import"] {
+    display: none !important;
+}
+
+/* ===================== MAIN ===================== */
 main {
     background-color: white;
     padding: 20px;
@@ -26,47 +76,50 @@ main {
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
 }
 
+/* ===================== TABS ===================== */
 .tabs {
     display: flex;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 2px solid #0047AB;
     margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 2px;
 }
 
 .tab-button {
-    background: none;
-    border: none;
+    background: #e9ecef;
+    border: 1px solid #ddd;
+    border-bottom: none;
     padding: 10px 20px;
     cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.3s;
+    color: #495057;
+    font-weight: 500;
+    border-radius: 4px 4px 0 0;
+    transition: background 0.2s, color 0.2s;
+    margin-right: 2px;
 }
 
 .tab-button.active {
-    border-bottom-color: #0047AB;
+    background: white;
+    border-bottom: 2px solid white;
     color: #0047AB;
     font-weight: bold;
+    position: relative;
+    top: 1px;
 }
 
-.tab-button:hover {
-    background-color: #f8f9fa;
+.tab-button:hover:not(.active) {
+    background-color: #d0d7de;
+    color: #333;
 }
 
-.tab-content {
-    min-height: 400px;
-}
+.tab-content { min-height: 400px; }
 
-.tab-panel {
-    display: none;
-}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
 
-.tab-panel.active {
-    display: block;
-}
+section { margin-bottom: 0; }
 
-section {
-    margin-bottom: 0;
-}
-
+/* ===================== FORM ===================== */
 form {
     display: grid;
     grid-template-columns: 1fr 2fr;
@@ -74,9 +127,7 @@ form {
     align-items: center;
 }
 
-label {
-    font-weight: bold;
-}
+label { font-weight: bold; }
 
 input, select, textarea {
     padding: 8px;
@@ -88,6 +139,7 @@ textarea {
     width: 100%;
     font-family: monospace;
     resize: vertical;
+    box-sizing: border-box;
 }
 
 pre {
@@ -98,6 +150,7 @@ pre {
     overflow-x: auto;
 }
 
+/* ===================== BUTTONS (general) ===================== */
 button {
     padding: 10px 15px;
     background-color: #28a745;
@@ -107,51 +160,160 @@ button {
     cursor: pointer;
     margin: 5px;
 }
+button:hover { background-color: #218838; }
 
-button:hover {
-    background-color: #218838;
-}
-
+/* ===================== MEMBER GRID (2-3 columns) ===================== */
 #members {
     display: grid;
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 12px;
 }
 
 .member-card {
     border: 1px solid #ddd;
-    padding: 15px;
-    border-radius: 5px;
+    padding: 14px;
+    border-radius: 6px;
     background-color: #f9f9f9;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .member-card h4 {
-    margin: 0 0 10px 0;
-    color: #0047AB;
+    margin: 0;
+    color: #1a1a1a;
+    font-size: 0.97em;
 }
 
 .member-card p {
-    margin: 5px 0;
+    margin: 2px 0;
+    font-size: 0.88em;
 }
 
-#error-msg {
-    color: red;
-    font-weight: bold;
-}
-
+/* ===================== DELETE / EDIT BUTTONS ===================== */
 .delete-btn {
     background-color: #c62828;
+    color: white;
+    border: none;
+    padding: 5px 9px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.82em;
+    margin: 0;
+}
+.delete-btn:hover { background-color: #b71c1c; }
+
+.edit-btn {
+    background-color: #0047AB;
+    color: white;
+    border: none;
+    padding: 5px 9px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.82em;
+    margin: 0;
+}
+.edit-btn:hover { background-color: #003580; }
+
+/* ===================== STATS BAR ===================== */
+.stats-bar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.stat-card {
+    background: #e8f0fe;
+    border: 1px solid #c5d6f7;
+    border-radius: 6px;
+    padding: 10px 14px;
+    text-align: center;
+    min-width: 90px;
+    flex: 1;
+}
+.stat-card .stat-number {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #0047AB;
+    display: block;
+}
+.stat-card .stat-label {
+    font-size: 0.75em;
+    color: #555;
+}
+
+/* ===================== SEARCH BAR ===================== */
+.search-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+}
+.search-bar input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.95em;
+}
+.search-bar button {
+    background: #6c757d;
+    color: white;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 0;
+}
+.search-bar button:hover { background: #5a6268; }
+
+/* ===================== BULK ACTIONS ===================== */
+.bulk-actions {
+    margin-bottom: 10px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+#bulk-delete-btn {
+    background: #c62828;
     color: white;
     border: none;
     padding: 6px 10px;
     border-radius: 4px;
     cursor: pointer;
+    margin: 0;
+}
+#bulk-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.member-count-label {
+    font-size: 0.88em;
+    color: #555;
+    margin-left: auto;
 }
 
-.delete-btn:hover {
-    background-color: #b71c1c;
+/* ===================== INLINE FORM STATUS ===================== */
+.form-status {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-weight: bold;
+    display: none;
+    font-size: 0.92em;
 }
+.form-status.success { background: #d4edda; color: #155724; display: block; }
+.form-status.error   { background: #f8d7da; color: #721c24; display: block; }
 
-/* Modal styles */
+/* ===================== DATA MANAGEMENT ===================== */
+.data-mgmt-section {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #eee;
+}
+.data-mgmt-section h4 { margin: 0 0 10px; color: #333; }
+.data-mgmt-section:last-of-type { border-bottom: none; }
+
+/* ===================== MODALS ===================== */
 .modal {
     display: none;
     position: fixed;
@@ -161,40 +323,96 @@ button:hover {
     width: 100%;
     height: 100%;
     overflow: auto;
-    background-color: rgba(0,0,0,0.4);
+    background-color: rgba(0,0,0,0.45);
     align-items: center;
     justify-content: center;
 }
 .modal[aria-hidden="false"] { display: flex; }
+
 .modal-content {
     background-color: #fff;
     margin: auto;
-    padding: 20px;
-    border-radius: 6px;
-    width: 90%;
+    padding: 22px;
+    border-radius: 8px;
+    width: 92%;
     max-width: 480px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
 }
-.modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:15px; }
-.confirm-ok { background-color:#c62828; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; }
+.modal-content h4 { margin: 0 0 12px; }
 
-/* Snackbar / undo */
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.confirm-ok {
+    background-color: #c62828;
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 0;
+}
+
+/* Edit form inside modal */
+.edit-form {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 8px;
+    align-items: center;
+}
+.edit-form label { font-weight: bold; font-size: 0.9em; }
+.edit-form input,
+.edit-form select { padding: 7px; font-size: 0.9em; }
+
+/* ===================== SNACKBAR / UNDO ===================== */
 .snackbar {
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
-    bottom: 20px;
+    bottom: 24px;
     background: #333;
     color: white;
-    padding: 10px 14px;
-    border-radius: 4px;
+    padding: 10px 16px;
+    border-radius: 6px;
     display: none;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     z-index: 1100;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    white-space: nowrap;
 }
-.snackbar button { background: transparent; border: 1px solid #fff; color: #fff; padding:6px 8px; border-radius:4px; cursor:pointer; }
+.snackbar button {
+    background: transparent;
+    border: 1px solid #fff;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 0;
+    font-size: 0.88em;
+}
 
-.bulk-actions { margin-bottom: 10px; display:flex; gap:12px; align-items:center; }
-#bulk-delete-btn { background:#c62828; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; }
-#bulk-delete-btn:disabled { opacity:0.6; cursor:not-allowed; }
+/* ===================== ERROR MSG ===================== */
+#error-msg { color: red; font-weight: bold; }
+
+/* ===================== PRINT ===================== */
+@media print {
+    .tabs, .bulk-actions, .search-bar, .snackbar, .modal,
+    .auth-bar, button { display: none !important; }
+    .tab-panel { display: block !important; }
+    header { background: none; color: black; border-bottom: 2px solid black; }
+    .member-card { break-inside: avoid; border: 1px solid #ccc; }
+    #members { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ===================== RESPONSIVE ===================== */
+@media (max-width: 600px) {
+    form, .edit-form { grid-template-columns: 1fr; }
+    header { flex-direction: column; align-items: flex-start; }
+    #members { grid-template-columns: 1fr; }
+    .tab-button { padding: 8px 12px; font-size: 0.88em; }
+}

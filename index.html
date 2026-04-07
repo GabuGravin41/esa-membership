@@ -8,20 +8,28 @@
 </head>
 <body>
     <header>
-        <h1>Engineering Students Association - Kenyatta University</h1>
-        <h2>Membership Manager</h2>
+        <div class="header-main">
+            <h1>Engineering Students Association - Kenyatta University</h1>
+            <h2>Membership Manager</h2>
+        </div>
+        <div class="auth-bar">
+            <span id="auth-user-email" class="auth-email"></span>
+            <button id="logout-btn" class="auth-btn" data-auth>Logout</button>
+            <button id="login-btn" class="auth-btn" data-no-auth>Committee Login</button>
+        </div>
     </header>
 
     <main>
         <div class="tabs">
-            <button class="tab-button active" data-tab="add-member">Add Member</button>
-            <button class="tab-button" data-tab="bulk-import">Bulk Import</button>
-            <button class="tab-button" data-tab="member-list">Member List</button>
+            <button class="tab-button active" data-tab="add-member" data-auth>Add Member</button>
+            <button class="tab-button active-public" data-tab="member-list">Member List</button>
+            <button class="tab-button" data-tab="bulk-import" data-auth>Bulk Import</button>
             <button class="tab-button" data-tab="export-import">Data Management</button>
         </div>
 
         <div class="tab-content">
-            <section id="add-member" class="tab-panel active">
+            <!-- ADD MEMBER TAB -->
+            <section id="add-member" class="tab-panel" data-auth>
                 <h3>Add New Member</h3>
                 <form id="member-form">
                     <label for="name">Full Name:</label>
@@ -30,7 +38,7 @@
                     <label for="email">Email:</label>
                     <input type="email" id="email" required>
 
-                    <label for="student-id">Student ID:</label>
+                    <label for="student-id">Admission No / Student ID:</label>
                     <input type="text" id="student-id" required>
 
                     <label for="department">Department:</label>
@@ -51,21 +59,42 @@
 
                     <button type="submit">Add Member</button>
                 </form>
+                <div id="add-member-status" class="form-status"></div>
             </section>
 
-            <section id="bulk-import" class="tab-panel">
+            <!-- MEMBER LIST TAB -->
+            <section id="member-list" class="tab-panel active">
+                <h3>Member List</h3>
+                <div id="stats-bar" class="stats-bar"></div>
+                <div class="search-bar">
+                    <input type="text" id="member-search" placeholder="Search by name, student ID, or department...">
+                    <button id="search-clear" title="Clear search">Clear</button>
+                </div>
+                <div class="bulk-actions" data-auth>
+                    <label><input type="checkbox" id="select-all"> Select all</label>
+                    <button id="bulk-delete-btn" disabled>Delete Selected</button>
+                    <span class="member-count-label" id="member-count-label"></span>
+                </div>
+                <div id="members"></div>
+            </section>
+
+            <!-- BULK IMPORT TAB -->
+            <section id="bulk-import" class="tab-panel" data-auth>
                 <h3>Bulk Import Members</h3>
-                <p>Paste member details in numbered list format or key:value format. Example:</p>
+                <p>Paste member details in numbered list format. Example:</p>
                 <pre>
 1. John Doe
 Email: john@example.com
 Admission No: J174/12345/2025
+Department: Electrical Engineering
+Year: 3
 Phone: +254712345678
 
 2. Jane Smith
 Email: jane@example.com
 Admission No: J174/12346/2025
-Phone: +254712345679
+Department: Civil Engineering
+Year: 2
                 </pre>
                 <textarea id="bulk-data" rows="10" placeholder="Paste your member data here..."></textarea>
                 <br>
@@ -73,29 +102,80 @@ Phone: +254712345679
                 <div id="bulk-status"></div>
             </section>
 
-            <section id="member-list" class="tab-panel">
-                <h3>Member List</h3>
-                <div class="bulk-actions">
-                    <label><input type="checkbox" id="select-all"> Select all</label>
-                    <button id="bulk-delete-btn" disabled>Delete Selected</button>
-                </div>
-                <div id="members"></div>
-            </section>
-
+            <!-- DATA MANAGEMENT TAB -->
             <section id="export-import" class="tab-panel">
                 <h3>Data Management</h3>
-                <button id="quick-backup">Quick Backup (JSON)</button>
-                <button id="export-csv">Export as CSV</button>
-                <button id="export-json">Export as JSON</button>
-                <button id="export-xlsx">Export as XLSX</button>
-                <br>
-                <label for="import-file">Import Data:</label>
-                <input type="file" id="import-file" accept=".json,.csv">
-                <button id="import-btn">Import</button>
+                <div class="data-mgmt-section">
+                    <h4>Export</h4>
+                    <button id="quick-backup">Quick Backup (JSON)</button>
+                    <button id="export-csv">Export as CSV</button>
+                    <button id="export-json">Export as JSON</button>
+                    <button id="export-xlsx">Export as XLSX</button>
+                </div>
+                <div class="data-mgmt-section" data-auth>
+                    <h4>Import</h4>
+                    <label for="import-file">Import Data (JSON or CSV):</label>
+                    <input type="file" id="import-file" accept=".json,.csv">
+                    <button id="import-btn">Import</button>
+                </div>
                 <div id="backup-status"></div>
             </section>
         </div>
     </main>
+
+    <!-- Login modal -->
+    <div id="login-modal" class="modal" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="login-title">
+            <h4 id="login-title">Committee Login</h4>
+            <p style="font-size:0.88em;color:#555;margin-bottom:14px">Only authorised committee members can add or delete members.</p>
+            <label for="login-password">Committee Password</label>
+            <input type="password" id="login-password" placeholder="Enter committee password" autocomplete="current-password" style="width:100%;box-sizing:border-box;margin-bottom:6px">
+            <p id="login-error" style="color:#c62828;min-height:1.2em;font-size:0.88em;margin:4px 0 10px"></p>
+            <div class="modal-actions">
+                <button id="login-cancel">Cancel</button>
+                <button id="login-submit" style="background:#0047AB;color:white">Login</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit member modal -->
+    <div id="edit-modal" class="modal" aria-hidden="true">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+            <h4 id="edit-title">Edit Member &mdash; <span id="edit-member-number" style="color:#0047AB"></span></h4>
+            <input type="hidden" id="edit-doc-id">
+            <div class="edit-form">
+                <label for="edit-name">Full Name</label>
+                <input type="text" id="edit-name" required>
+
+                <label for="edit-email">Email</label>
+                <input type="email" id="edit-email" required>
+
+                <label for="edit-student-id">Admission No / Student ID</label>
+                <input type="text" id="edit-student-id" required>
+
+                <label for="edit-department">Department</label>
+                <input type="text" id="edit-department" required>
+
+                <label for="edit-year">Year of Study</label>
+                <select id="edit-year" required>
+                    <option value="">Select Year</option>
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                    <option value="4">4th Year</option>
+                    <option value="5">5th Year</option>
+                </select>
+
+                <label for="edit-phone">Phone (Optional)</label>
+                <input type="tel" id="edit-phone">
+            </div>
+            <p id="edit-error" style="color:#c62828;min-height:1.2em;font-size:0.88em;margin:8px 0 0"></p>
+            <div class="modal-actions">
+                <button id="edit-cancel">Cancel</button>
+                <button id="edit-save" style="background:#0047AB;color:white">Save Changes</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Confirmation modal -->
     <div id="confirm-modal" class="modal" aria-hidden="true">

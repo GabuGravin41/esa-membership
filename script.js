@@ -1,554 +1,357 @@
-// script.js - ESA-KU Membership Manager
+// ============================================================
+// ESA-KU MEMBERSHIP MANAGER — localStorage version
+// Firebase will replace this once configured.
+// ============================================================
 
-document.addEventListener('DOMContentLoaded', function() {
-    loadMembers();
-    document.getElementById('member-form').addEventListener('submit', addMember);
-    document.getElementById('export-csv').addEventListener('click', exportCSV);
-    document.getElementById('export-json').addEventListener('click', exportJSON);
-    document.getElementById('export-xlsx').addEventListener('click', exportXLSX);
-    document.getElementById('import-btn').addEventListener('click', importData);
-    document.getElementById('bulk-add').addEventListener('click', bulkAddMembers);
-    document.getElementById('quick-backup').addEventListener('click', quickBackup);
-    
-    // Initialize persistent member counter so member numbers are unique
-    initMemberCounter();
-    // Tab functionality
-    const tabButtons = document.querySelectorAll('.tab-button');
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const tabName = button.getAttribute('data-tab');
-            switchTab(tabName);
-        });
-    });
-});
+// Change this password before sharing the link.
+const COMMITTEE_PASSWORD = 'ESA-KU-2026';
 
-function switchTab(tabName) {
-    // Hide all tab panels
-    const tabPanels = document.querySelectorAll('.tab-panel');
-    tabPanels.forEach(panel => panel.classList.remove('active'));
-    
-    // Remove active class from all buttons
-    const tabButtons = document.querySelectorAll('.tab-button');
-    tabButtons.forEach(button => button.classList.remove('active'));
-    
-    // Show selected tab
-    document.getElementById(tabName).classList.add('active');
-    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-}
+// ============================================================
+// MODULE STATE
+// ============================================================
+let _lastDeleted = [];
+let _undoTimer   = null;
 
+// ============================================================
+// localStorage HELPERS
+// ============================================================
 function getMembers() {
-    const members = localStorage.getItem('esa-members');
-    return members ? JSON.parse(members) : [];
+    try { return JSON.parse(localStorage.getItem('esa-members') || '[]'); } catch { return []; }
 }
-
 function saveMembers(members) {
     localStorage.setItem('esa-members', JSON.stringify(members));
 }
 
-function initMemberCounter() {
-    const members = getMembers();
-    let max = 0;
-    members.forEach(m => {
-        if (m && m.memberNumber) {
-            const match = String(m.memberNumber).match(/ESA-KU-(\d+)/);
-            if (match) {
-                const n = parseInt(match[1], 10);
-                if (!isNaN(n) && n > max) max = n;
-            }
-        }
-    });
+// ============================================================
+// AUTH — simple password stored in sessionStorage
+// Resets when the browser tab is closed.
+// ============================================================
+function isLoggedIn() {
+    return sessionStorage.getItem('esa-auth') === '1';
+}
 
-    const stored = parseInt(localStorage.getItem('esa-member-counter') || '0', 10);
-    if (isNaN(stored) || stored < max) {
-        localStorage.setItem('esa-member-counter', String(max));
+function applyAuthState() {
+    if (isLoggedIn()) {
+        document.body.classList.add('logged-in');
+        document.getElementById('auth-user-email').textContent = 'Committee';
+    } else {
+        document.body.classList.remove('logged-in');
+        document.getElementById('auth-user-email').textContent = '';
+        const active = document.querySelector('.tab-panel.active');
+        if (active && (active.id === 'add-member' || active.id === 'bulk-import')) {
+            switchTab('member-list');
+        }
+    }
+    renderMemberList(getMembers());
+}
+
+function openLoginModal() {
+    document.getElementById('login-modal').setAttribute('aria-hidden', 'false');
+    document.getElementById('login-email').focus();
+}
+function closeLoginModal() {
+    document.getElementById('login-modal').setAttribute('aria-hidden', 'true');
+    document.getElementById('login-email').value    = '';
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-error').textContent = '';
+}
+
+function loginUser() {
+    const password = document.getElementById('login-password').value;
+    const errorEl  = document.getElementById('login-error');
+    errorEl.textContent = '';
+
+    if (!password) { errorEl.textContent = 'Please enter the committee password.'; return; }
+
+    if (password === COMMITTEE_PASSWORD) {
+        sessionStorage.setItem('esa-auth', '1');
+        closeLoginModal();
+        applyAuthState();
+    } else {
+        errorEl.textContent = 'Incorrect password.';
     }
 }
 
-function generateMemberNumber() {
-    let counter = parseInt(localStorage.getItem('esa-member-counter') || '0', 10);
-    if (isNaN(counter)) counter = 0;
-    counter += 1;
-    localStorage.setItem('esa-member-counter', String(counter));
-    return `ESA-KU-${String(counter).padStart(4, '0')}`;
+// ============================================================
+// MEMBER NUMBER — derived from student ID
+// J174/6153/2025 → ESA-6153
+// ============================================================
+function deriveMemberNumber(studentId) {
+    const parts = studentId.trim().split('/');
+    if (parts.length >= 3) return `ESA-${parts[1].trim()}`;
+    if (parts.length === 2) return `ESA-${parts[1].trim()}`;
+    return `ESA-${studentId.replace(/[^a-zA-Z0-9]/g, '')}`;
+}
+
+// ============================================================
+// LOAD / RENDER
+// ============================================================
+function loadMembers() {
+    const members = getMembers();
+    renderStatsBar(members);
+    renderMemberList(members);
+}
+
+// ============================================================
+// ADD MEMBER
+// ============================================================
+function showFormStatus(message, type) {
+    const el = document.getElementById('add-member-status');
+    if (!el) return;
+    el.textContent = message;
+    el.className   = `form-status ${type}`;
+    if (type === 'success') {
+        setTimeout(() => { el.className = 'form-status'; el.textContent = ''; }, 5000);
+    }
 }
 
 function addMember(e) {
     e.preventDefault();
-    
-    const name = document.getElementById('name').value.trim();
-    const email = document.getElementById('email').value.trim();
-    const studentId = document.getElementById('student-id').value.trim();
+    if (!isLoggedIn()) { showFormStatus('You must be logged in to add members.', 'error'); return; }
+
+    const name       = document.getElementById('name').value.trim();
+    const email      = document.getElementById('email').value.trim();
+    const studentId  = document.getElementById('student-id').value.trim();
     const department = document.getElementById('department').value.trim();
-    const year = document.getElementById('year').value;
-    const phone = document.getElementById('phone').value.trim();
-    
+    const year       = document.getElementById('year').value;
+    const phone      = document.getElementById('phone').value.trim();
+
     if (!name || !email || !studentId || !department || !year) {
-        alert('Please fill in all required fields.');
-        return;
+        showFormStatus('Please fill in all required fields.', 'error'); return;
     }
-    
+
     const members = getMembers();
-    
-    // Check if email or student ID already exists
-    if (members.some(m => m.email === email || m.studentId === studentId)) {
-        alert('A member with this email or student ID already exists.');
-        return;
+    if (members.some(m => m.email === email)) {
+        showFormStatus('A member with this email already exists.', 'error'); return;
     }
-    
-    const newMember = {
-        memberNumber: generateMemberNumber(),
-        name: name,
-        email: email,
-        studentId: studentId,
-        department: department,
-        year: year,
-        phone: phone,
-        dateAdded: new Date().toISOString()
-    };
-    
-    members.push(newMember);
+    if (members.some(m => m.studentId === studentId)) {
+        showFormStatus('A member with this student ID already exists.', 'error'); return;
+    }
+
+    const memberNumber = deriveMemberNumber(studentId);
+    members.push({ memberNumber, name, email, studentId, department, year, phone, dateAdded: new Date().toISOString() });
     saveMembers(members);
-    initMemberCounter();
-    
     document.getElementById('member-form').reset();
     loadMembers();
-    
-    alert(`Member added successfully! Member Number: ${newMember.memberNumber}`);
+    showFormStatus(`Member added! Member Number: ${memberNumber}`, 'success');
 }
 
-function loadMembers() {
-    const members = getMembers();
-    const membersDiv = document.getElementById('members');
-    
-    if (members.length === 0) {
-        membersDiv.innerHTML = '<p>No members added yet.</p>';
-        return;
+// ============================================================
+// EDIT MEMBER
+// ============================================================
+function openEditModal(member) {
+    document.getElementById('edit-doc-id').value              = member.memberNumber;
+    document.getElementById('edit-member-number').textContent = member.memberNumber || '';
+    document.getElementById('edit-name').value                = member.name || '';
+    document.getElementById('edit-email').value               = member.email || '';
+    document.getElementById('edit-student-id').value          = member.studentId || '';
+    document.getElementById('edit-department').value          = member.department || '';
+    document.getElementById('edit-year').value                = member.year || '';
+    document.getElementById('edit-phone').value               = member.phone || '';
+    document.getElementById('edit-error').textContent         = '';
+    document.getElementById('edit-modal').setAttribute('aria-hidden', 'false');
+    document.getElementById('edit-name').focus();
+}
+function closeEditModal() {
+    document.getElementById('edit-modal').setAttribute('aria-hidden', 'true');
+}
+
+function saveEditMember() {
+    const originalNumber = document.getElementById('edit-doc-id').value;
+    const name       = document.getElementById('edit-name').value.trim();
+    const email      = document.getElementById('edit-email').value.trim();
+    const studentId  = document.getElementById('edit-student-id').value.trim();
+    const department = document.getElementById('edit-department').value.trim();
+    const year       = document.getElementById('edit-year').value;
+    const phone      = document.getElementById('edit-phone').value.trim();
+    const errorEl    = document.getElementById('edit-error');
+
+    if (!name || !email || !studentId || !department || !year) {
+        errorEl.textContent = 'Please fill in all required fields.'; return;
     }
-    
+
+    const members = getMembers();
+    const others  = members.filter(m => m.memberNumber !== originalNumber);
+
+    if (others.some(m => m.email === email)) {
+        errorEl.textContent = 'Another member with this email already exists.'; return;
+    }
+    if (others.some(m => m.studentId === studentId)) {
+        errorEl.textContent = 'Another member with this student ID already exists.'; return;
+    }
+
+    // Re-derive member number if student ID changed
+    const newMemberNumber = deriveMemberNumber(studentId);
+
+    const idx = members.findIndex(m => m.memberNumber === originalNumber);
+    if (idx === -1) { errorEl.textContent = 'Member not found.'; return; }
+
+    members[idx] = { ...members[idx], memberNumber: newMemberNumber, name, email, studentId, department, year, phone };
+    saveMembers(members);
+    closeEditModal();
+    loadMembers();
+}
+
+// ============================================================
+// DELETE & UNDO
+// ============================================================
+function performSoftDelete(memberNumbers) {
+    if (!Array.isArray(memberNumbers) || !memberNumbers.length) return;
+    const members  = getMembers();
+    _lastDeleted   = members.filter(m => memberNumbers.includes(m.memberNumber));
+    if (!_lastDeleted.length) return;
+
+    saveMembers(members.filter(m => !memberNumbers.includes(m.memberNumber)));
+    loadMembers();
+    showUndoSnackbar(`${_lastDeleted.length} member(s) deleted.`);
+
+    if (_undoTimer) clearTimeout(_undoTimer);
+    _undoTimer = setTimeout(() => { _lastDeleted = []; hideUndoSnackbar(); }, 8000);
+}
+
+function undoDelete() {
+    if (!_lastDeleted.length) return;
+    const members = getMembers();
+    saveMembers([...members, ..._lastDeleted]);
+    _lastDeleted = [];
+    if (_undoTimer) clearTimeout(_undoTimer);
+    hideUndoSnackbar();
+    loadMembers();
+}
+
+function showUndoSnackbar(message) {
+    document.getElementById('undo-message').textContent = message;
+    document.getElementById('undo-snackbar').style.display = 'flex';
+}
+function hideUndoSnackbar() {
+    const sb = document.getElementById('undo-snackbar');
+    if (sb) sb.style.display = 'none';
+}
+
+// ============================================================
+// STATS BAR
+// ============================================================
+function renderStatsBar(members) {
+    const bar = document.getElementById('stats-bar');
+    if (!bar) return;
+    const yearCounts = {};
+    members.forEach(m => {
+        const y = parseInt(m.year, 10);
+        if (!isNaN(y)) yearCounts[y] = (yearCounts[y] || 0) + 1;
+    });
+    const deptSet = new Set(members.map(m => (m.department || '').trim().toLowerCase()).filter(Boolean));
+    bar.innerHTML = `
+        <div class="stat-card"><span class="stat-number">${members.length}</span><span class="stat-label">Total Members</span></div>
+        <div class="stat-card"><span class="stat-number">${deptSet.size}</span><span class="stat-label">Departments</span></div>
+        ${[1,2,3,4,5].filter(y => yearCounts[y]).map(y => `
+        <div class="stat-card"><span class="stat-number">${yearCounts[y]}</span><span class="stat-label">Year ${y}</span></div>`).join('')}
+    `;
+}
+
+// ============================================================
+// MEMBER LIST RENDERING
+// ============================================================
+function renderMemberList(allMembers) {
+    const membersDiv = document.getElementById('members');
+    const countLabel = document.getElementById('member-count-label');
+    const loggedIn   = isLoggedIn();
+
+    const q = ((document.getElementById('member-search') || {}).value || '').trim().toLowerCase();
+    const members = q
+        ? allMembers.filter(m =>
+            (m.name         || '').toLowerCase().includes(q) ||
+            (m.studentId    || '').toLowerCase().includes(q) ||
+            (m.department   || '').toLowerCase().includes(q) ||
+            (m.memberNumber || '').toLowerCase().includes(q))
+        : allMembers;
+
+    if (countLabel) {
+        countLabel.textContent = q
+            ? `${members.length} of ${allMembers.length} shown`
+            : `${allMembers.length} member${allMembers.length !== 1 ? 's' : ''}`;
+    }
+
+    if (allMembers.length === 0) { membersDiv.innerHTML = '<p>No members added yet.</p>'; return; }
+    if (members.length === 0)    { membersDiv.innerHTML = '<p>No members match your search.</p>'; return; }
+
     membersDiv.innerHTML = members.map(member => {
-        const displayName = String(member.name || '').replace(/\s*\(ESA-KU-\d+\)\s*/,'').trim();
+        const displayName        = String(member.name || '').replace(/\s*\(ESA-[^)]+\)\s*/, '').trim();
         const memberNumberDisplay = member.memberNumber || 'Unassigned';
-        let yearText = member.year || '';
-        const y = parseInt(yearText, 10);
-        if (!isNaN(y)) {
-            yearText = `${y}${y == 1 ? 'st' : y == 2 ? 'nd' : y == 3 ? 'rd' : 'th'} Year`;
-        } else if (yearText) {
-            yearText = `${yearText} Year`;
-        }
+        const y = parseInt(member.year, 10);
+        const yearText = !isNaN(y) ? `${y}${y===1?'st':y===2?'nd':y===3?'rd':'th'} Year`
+                       : member.year ? `${member.year} Year` : '';
+
+        const checkboxHtml = loggedIn
+            ? `<input type="checkbox" class="select-checkbox" data-member-number="${memberNumberDisplay}" aria-label="Select ${displayName}">`
+            : '';
+        const actionsHtml = loggedIn ? `
+            <div style="display:flex;gap:5px;flex-shrink:0">
+                <button class="edit-btn"   data-member-number="${memberNumberDisplay}" title="Edit">Edit</button>
+                <button class="delete-btn" data-member-number="${memberNumberDisplay}" title="Delete">Delete</button>
+            </div>` : '';
 
         return `
         <div class="member-card">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <div style="display:flex;align-items:center;gap:10px">
-                    <input type="checkbox" class="select-checkbox" data-member-number="${memberNumberDisplay}" aria-label="Select ${displayName}">
-                    <h4>${displayName} (${memberNumberDisplay})</h4>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
+                <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                    ${checkboxHtml}
+                    <div style="min-width:0">
+                        <h4 style="margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${displayName}</h4>
+                        <small style="color:#0047AB;font-weight:bold">${memberNumberDisplay}</small>
+                    </div>
                 </div>
-                <button class="delete-btn" data-member-number="${memberNumberDisplay}" title="Delete member">Delete</button>
+                ${actionsHtml}
             </div>
             <p><strong>Email:</strong> ${member.email}</p>
             <p><strong>Student ID:</strong> ${member.studentId}</p>
-            <p><strong>Department:</strong> ${member.department}</p>
-            <p><strong>Year:</strong> ${yearText}</p>
+            <p><strong>Dept:</strong> ${member.department}</p>
+            ${yearText ? `<p><strong>Year:</strong> ${yearText}</p>` : ''}
             ${member.phone ? `<p><strong>Phone:</strong> ${member.phone}</p>` : ''}
-            <p><strong>Date Added:</strong> ${new Date(member.dateAdded).toLocaleDateString()}</p>
-        </div>
-    `;
+            <p style="color:#888;font-size:0.78em;margin-top:4px">Added: ${new Date(member.dateAdded).toLocaleDateString()}</p>
+        </div>`;
     }).join('');
 
-    // Wire delete buttons after rendering (uses modal)
-    document.querySelectorAll('.delete-btn').forEach(btn => {
+    membersDiv.querySelectorAll('.edit-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const memberNumber = btn.dataset.memberNumber;
-            showConfirmModal(`Delete member ${memberNumber}? This action cannot be undone.`, () => performSoftDelete([memberNumber]));
+            const m = getMembers().find(x => x.memberNumber === btn.dataset.memberNumber);
+            if (m) openEditModal(m);
         });
     });
 
-    // Wire selection checkboxes
-    document.querySelectorAll('.select-checkbox').forEach(cb => {
+    membersDiv.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            showConfirmModal(`Delete member ${btn.dataset.memberNumber}?`,
+                () => performSoftDelete([btn.dataset.memberNumber]));
+        });
+    });
+
+    membersDiv.querySelectorAll('.select-checkbox').forEach(cb => {
         cb.addEventListener('change', updateBulkControls);
     });
 
-    // Wire select-all
     const selectAll = document.getElementById('select-all');
     if (selectAll) {
         selectAll.checked = false;
-        selectAll.addEventListener('change', () => {
-            const checked = selectAll.checked;
-            document.querySelectorAll('.select-checkbox').forEach(cb => cb.checked = checked);
+        selectAll.onclick = () => {
+            membersDiv.querySelectorAll('.select-checkbox').forEach(cb => cb.checked = selectAll.checked);
             updateBulkControls();
-        });
+        };
     }
-
     const bulkBtn = document.getElementById('bulk-delete-btn');
     if (bulkBtn) {
         bulkBtn.disabled = true;
-        bulkBtn.addEventListener('click', () => {
-            const selected = Array.from(document.querySelectorAll('.select-checkbox:checked')).map(cb => cb.dataset.memberNumber);
-            if (selected.length === 0) return;
-            showConfirmModal(`Delete ${selected.length} selected members? This action cannot be undone.`, () => performSoftDelete(selected));
-        });
-    }
-
-    // Check for pending undo on load
-    checkPendingUndo();
-}
-
-function deleteMember(memberNumber) {
-    if (!memberNumber) return;
-    const ok = confirm(`Delete member ${memberNumber}? This action cannot be undone.`);
-    if (!ok) return;
-
-    const members = getMembers();
-    const updated = members.filter(m => m.memberNumber !== memberNumber);
-    if (updated.length === members.length) {
-        alert('Member not found.');
-        return;
-    }
-    saveMembers(updated);
-    // keep counter intact (do not decrement) but ensure counter stays at least max
-    initMemberCounter();
-    loadMembers();
-    alert(`Member ${memberNumber} deleted.`);
-}
-
-function exportCSV() {
-    const members = getMembers();
-    if (members.length === 0) {
-        alert('No members to export.');
-        return;
-    }
-    
-    const csvContent = [
-        ['Member Number', 'Name', 'Email', 'Student ID', 'Department', 'Year', 'Phone', 'Date Added'],
-        ...members.map(m => [
-            m.memberNumber,
-            m.name,
-            m.email,
-            m.studentId,
-            m.department,
-            m.year,
-            m.phone || '',
-            m.dateAdded
-        ])
-    ].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
-    
-    downloadFile(csvContent, 'esa-members.csv', 'text/csv');
-}
-
-function exportJSON() {
-    const members = getMembers();
-    if (members.length === 0) {
-        alert('No members to export.');
-        return;
-    }
-    
-    const jsonContent = JSON.stringify(members, null, 2);
-    downloadFile(jsonContent, 'esa-members.json', 'application/json');
-}
-
-function exportXLSX() {
-    const members = getMembers();
-    if (members.length === 0) {
-        alert('No members to export.');
-        return;
-    }
-    
-    const ws = XLSX.utils.json_to_sheet(members.map(m => ({
-        'Member Number': m.memberNumber,
-        'Name': m.name,
-        'Email': m.email,
-        'Student ID': m.studentId,
-        'Department': m.department,
-        'Year': m.year,
-        'Phone': m.phone || '',
-        'Date Added': m.dateAdded
-    })));
-    
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Members');
-    XLSX.writeFile(wb, 'esa-members.xlsx');
-}
-
-function importData() {
-    const fileInput = document.getElementById('import-file');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        alert('Please select a file to import.');
-        return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            let importedMembers;
-            
-            if (file.name.endsWith('.json')) {
-                importedMembers = JSON.parse(e.target.result);
-            } else if (file.name.endsWith('.csv')) {
-                // Simple CSV parsing - assumes first row is headers
-                const csvText = e.target.result;
-                const lines = csvText.split('\n').filter(line => line.trim());
-                const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
-                
-                importedMembers = lines.slice(1).map(line => {
-                    const values = line.split(',').map(v => v.replace(/"/g, ''));
-                    const member = {};
-                    headers.forEach((header, index) => {
-                        member[header.toLowerCase().replace(' ', '')] = values[index] || '';
-                    });
-                    return member;
-                });
-            } else {
-                throw new Error('Unsupported file format. Please use JSON or CSV.');
-            }
-            
-            // Validate imported data
-            const validMembers = importedMembers.filter(m => m.name && m.email && m.studentId);
-            
-            if (validMembers.length === 0) {
-                alert('No valid member data found in the file.');
-                return;
-            }
-            
-            // Merge with existing members, avoiding duplicates
-            const existingMembers = getMembers();
-            const existingEmails = new Set(existingMembers.map(m => m.email));
-            const existingStudentIds = new Set(existingMembers.map(m => m.studentId));
-            
-            const newMembers = validMembers.filter(m => 
-                !existingEmails.has(m.email) && !existingStudentIds.has(m.studentId)
-            );
-            
-            if (newMembers.length === 0) {
-                alert('All imported members already exist or are invalid.');
-                return;
-            }
-            
-            // Assign member numbers to imported members if they don't have them
-            newMembers.forEach(member => {
-                if (!member.memberNumber) {
-                    member.memberNumber = generateMemberNumber();
-                }
-                if (!member.dateAdded) {
-                    member.dateAdded = new Date().toISOString();
-                }
-            });
-            
-            const updatedMembers = [...existingMembers, ...newMembers];
-            saveMembers(updatedMembers);
-            initMemberCounter();
-            
-            loadMembers();
-            alert(`Successfully imported ${newMembers.length} new members.`);
-            
-        } catch (error) {
-            alert('Error importing data: ' + error.message);
-        }
-    };
-    
-    reader.readAsText(file);
-}
-
-function bulkAddMembers() {
-    const bulkData = document.getElementById('bulk-data').value.trim();
-    const statusDiv = document.getElementById('bulk-status');
-    
-    if (!bulkData) {
-        statusDiv.innerHTML = '<p style="color: red;">Please paste member data first.</p>';
-        return;
-    }
-    
-    try {
-        const lines = bulkData.split('\n').map(line => line.trim()).filter(line => line);
-        const parsedMembers = [];
-        const errors = [];
-        
-        let currentMember = null;
-        let memberIndex = 0;
-        
-        for (const line of lines) {
-            // Check if this is a new member (starts with number.)
-            const numberMatch = line.match(/^(\d+)\.\s*(.+)$/);
-            if (numberMatch) {
-                // Save previous member if exists
-                if (currentMember) {
-                    parsedMembers.push(currentMember);
-                }
-                
-                memberIndex = parseInt(numberMatch[1]);
-                const name = numberMatch[2].trim();
-                
-                currentMember = {
-                    name: name,
-                    email: '',
-                    studentId: '',
-                    department: '',
-                    year: '',
-                    phone: '',
-                    dateAdded: new Date().toISOString()
-                };
-            } else if (currentMember) {
-                // Parse key: value lines
-                const colonIndex = line.indexOf(':');
-                if (colonIndex > 0) {
-                    const key = line.substring(0, colonIndex).trim().toLowerCase().replace(/\s+/g, '');
-                    const value = line.substring(colonIndex + 1).trim();
-                    
-                    if (key.includes('email') && !currentMember.email) {
-                        currentMember.email = value;
-                    } else if (key.includes('admission') || key.includes('studentid')) {
-                        currentMember.studentId = value;
-                    } else if (key.includes('phone')) {
-                        currentMember.phone = value;
-                    } else if (key.includes('department')) {
-                        currentMember.department = value;
-                    } else if (key.includes('year')) {
-                        currentMember.year = value;
-                    }
-                }
-            }
-        }
-        
-        // Don't forget the last member
-        if (currentMember) {
-            parsedMembers.push(currentMember);
-        }
-        
-        // Also try the old key:value format as fallback
-        if (parsedMembers.length === 0) {
-            const memberBlocks = bulkData.split(/\n\s*\n/).filter(block => block.trim());
-            
-            memberBlocks.forEach((block, index) => {
-                const lines = block.split('\n').map(line => line.trim()).filter(line => line);
-                const memberData = {};
-                
-                lines.forEach(line => {
-                    const colonIndex = line.indexOf(':');
-                    if (colonIndex > 0) {
-                        const key = line.substring(0, colonIndex).trim().toLowerCase().replace(/\s+/g, '');
-                        const value = line.substring(colonIndex + 1).trim();
-                        memberData[key] = value;
-                    }
-                });
-                
-                const name = memberData.name || memberData.fullname || memberData.full_name;
-                const email = memberData.email || memberData.emailaddress;
-                const studentId = memberData.studentid || memberData.student_id || memberData.admissionnumber || memberData.admission_number;
-                const department = memberData.department || memberData.dept;
-                const year = memberData.year || memberData.yearofstudy || memberData.year_of_study;
-                const phone = memberData.phone || memberData.phonenumber || memberData.phone_number || memberData.mobile;
-                
-                if (name && email && studentId) {
-                    parsedMembers.push({
-                        name: name,
-                        email: email,
-                        studentId: studentId,
-                        department: department || '',
-                        year: year || '',
-                        phone: phone || '',
-                        dateAdded: new Date().toISOString()
-                    });
-                } else {
-                    errors.push(`Member ${index + 1}: Missing required fields (name, email, student_id)`);
-                }
-            });
-        }
-        
-        // Validate parsed members
-        const validMembers = parsedMembers.filter(m => m.name && m.email && m.studentId);
-        const invalidCount = parsedMembers.length - validMembers.length;
-        
-        if (invalidCount > 0) {
-            errors.push(`${invalidCount} members had missing required fields`);
-        }
-        
-        if (validMembers.length === 0) {
-            statusDiv.innerHTML = '<p style="color: red;">No valid members found in the pasted data.</p>';
-            return;
-        }
-        
-        // Check for duplicates
-        const existingMembers = getMembers();
-        const existingEmails = new Set(existingMembers.map(m => m.email));
-        const existingStudentIds = new Set(existingMembers.map(m => m.studentId));
-        
-        const newMembers = validMembers.filter(m => 
-            !existingEmails.has(m.email) && !existingStudentIds.has(m.studentId)
-        );
-        
-        const duplicates = validMembers.length - newMembers.length;
-        
-        if (newMembers.length === 0) {
-            statusDiv.innerHTML = '<p style="color: red;">All members already exist in the system.</p>';
-            return;
-        }
-        
-        // Generate member numbers
-        newMembers.forEach(member => {
-            member.memberNumber = generateMemberNumber();
-        });
-        
-        // Add to existing members
-        const updatedMembers = [...existingMembers, ...newMembers];
-        saveMembers(updatedMembers);
-        initMemberCounter();
-        
-        loadMembers();
-        
-        let statusMessage = `<p style="color: green;">Successfully added ${newMembers.length} new members.`;
-        if (duplicates > 0) {
-            statusMessage += ` ${duplicates} duplicates were skipped.`;
-        }
-        if (errors.length > 0) {
-            statusMessage += ` Errors: ${errors.join(', ')}.`;
-        }
-        statusMessage += '</p>';
-        
-        statusDiv.innerHTML = statusMessage;
-        
-        // Clear the textarea
-        document.getElementById('bulk-data').value = '';
-        
-    } catch (error) {
-        statusDiv.innerHTML = `<p style="color: red;">Error processing data: ${error.message}</p>`;
+        bulkBtn.onclick = () => {
+            const selected = Array.from(membersDiv.querySelectorAll('.select-checkbox:checked'))
+                .map(cb => cb.dataset.memberNumber);
+            if (!selected.length) return;
+            showConfirmModal(`Delete ${selected.length} selected member(s)?`, () => performSoftDelete(selected));
+        };
     }
 }
 
-function quickBackup() {
-    const members = getMembers();
-    if (members.length === 0) {
-        document.getElementById('backup-status').innerHTML = '<p style="color: red;">No members to backup.</p>';
-        return;
-    }
-    
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `esa-members-backup-${timestamp}.json`;
-    
-    const jsonContent = JSON.stringify(members, null, 2);
-    downloadFile(jsonContent, filename, 'application/json');
-    
-    // Update last backup time
-    localStorage.setItem('esa-last-backup', new Date().toISOString());
-    document.getElementById('backup-status').innerHTML = `<p style="color: green;">Backup created: ${filename}</p>`;
-}
-
-function downloadFile(content, filename, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// Bulk controls helpers and undo functionality
 function updateBulkControls() {
-    const selected = document.querySelectorAll('.select-checkbox:checked').length;
-    const bulkBtn = document.getElementById('bulk-delete-btn');
+    const selected  = document.querySelectorAll('.select-checkbox:checked').length;
+    const bulkBtn   = document.getElementById('bulk-delete-btn');
     if (bulkBtn) bulkBtn.disabled = selected === 0;
     const selectAll = document.getElementById('select-all');
     if (selectAll) {
@@ -557,97 +360,236 @@ function updateBulkControls() {
     }
 }
 
-// Confirmation modal control
+// ============================================================
+// BULK ADD MEMBERS
+// ============================================================
+function bulkAddMembers() {
+    if (!isLoggedIn()) return;
+    const bulkData  = document.getElementById('bulk-data').value.trim();
+    const statusDiv = document.getElementById('bulk-status');
+
+    if (!bulkData) { statusDiv.innerHTML = '<p style="color:red">Please paste member data first.</p>'; return; }
+
+    try {
+        const lines         = bulkData.split('\n').map(l => l.trim()).filter(Boolean);
+        const parsedMembers = [];
+        let currentMember   = null;
+
+        for (const line of lines) {
+            const numMatch = line.match(/^(\d+)\.\s*(.+)$/);
+            if (numMatch) {
+                if (currentMember) parsedMembers.push(currentMember);
+                currentMember = { name: numMatch[2].trim(), email:'', studentId:'', department:'', year:'', phone:'', dateAdded: new Date().toISOString() };
+            } else if (currentMember) {
+                const ci = line.indexOf(':');
+                if (ci > 0) {
+                    const key = line.slice(0, ci).trim().toLowerCase().replace(/\s+/g, '');
+                    const val = line.slice(ci + 1).trim();
+                    if      (key.includes('email'))                               currentMember.email      = currentMember.email || val;
+                    else if (key.includes('admission') || key.includes('studentid')) currentMember.studentId = val;
+                    else if (key.includes('phone'))                               currentMember.phone      = val;
+                    else if (key.includes('department') || key.includes('dept')) currentMember.department = val;
+                    else if (key.includes('year'))                                currentMember.year       = val;
+                }
+            }
+        }
+        if (currentMember) parsedMembers.push(currentMember);
+
+        const validMembers = parsedMembers.filter(m => m.name && m.email && m.studentId);
+        if (!validMembers.length) {
+            statusDiv.innerHTML = '<p style="color:red">No valid members found. Check each entry has Name, Email, and Admission No.</p>';
+            return;
+        }
+
+        const existing       = getMembers();
+        const existingEmails = new Set(existing.map(m => m.email));
+        const existingIds    = new Set(existing.map(m => m.studentId));
+        const newMembers     = validMembers.filter(m => !existingEmails.has(m.email) && !existingIds.has(m.studentId));
+        const duplicates     = validMembers.length - newMembers.length;
+
+        if (!newMembers.length) { statusDiv.innerHTML = '<p style="color:red">All members in the pasted data already exist.</p>'; return; }
+
+        newMembers.forEach(m => { m.memberNumber = deriveMemberNumber(m.studentId); });
+        saveMembers([...existing, ...newMembers]);
+        loadMembers();
+
+        let msg = `<p style="color:green">Added ${newMembers.length} new member(s).`;
+        if (duplicates) msg += ` ${duplicates} duplicate(s) skipped.`;
+        msg += '</p>';
+        statusDiv.innerHTML = msg;
+        document.getElementById('bulk-data').value = '';
+
+    } catch (err) {
+        statusDiv.innerHTML = `<p style="color:red">Error: ${err.message}</p>`;
+    }
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+function exportCSV() {
+    const members = getMembers();
+    if (!members.length) { alert('No members to export.'); return; }
+    const rows = [
+        ['Member Number','Name','Email','Student ID','Department','Year','Phone','Date Added'],
+        ...members.map(m => [m.memberNumber, m.name, m.email, m.studentId, m.department, m.year, m.phone||'', m.dateAdded])
+    ];
+    downloadFile(rows.map(r => r.map(f => `"${f}"`).join(',')).join('\n'), 'esa-members.csv', 'text/csv');
+}
+
+function exportJSON() {
+    const members = getMembers();
+    if (!members.length) { alert('No members to export.'); return; }
+    downloadFile(JSON.stringify(members, null, 2), 'esa-members.json', 'application/json');
+}
+
+function exportXLSX() {
+    const members = getMembers();
+    if (!members.length) { alert('No members to export.'); return; }
+    const ws = XLSX.utils.json_to_sheet(members.map(m => ({
+        'Member Number': m.memberNumber, 'Name': m.name, 'Email': m.email,
+        'Student ID': m.studentId, 'Department': m.department, 'Year': m.year,
+        'Phone': m.phone || '', 'Date Added': m.dateAdded
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Members');
+    XLSX.writeFile(wb, 'esa-members.xlsx');
+}
+
+function quickBackup() {
+    const members = getMembers();
+    if (!members.length) { document.getElementById('backup-status').innerHTML = '<p style="color:red">No members to backup.</p>'; return; }
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    downloadFile(JSON.stringify(members, null, 2), `esa-members-backup-${ts}.json`, 'application/json');
+    document.getElementById('backup-status').innerHTML = `<p style="color:green">Backup saved: esa-members-backup-${ts}.json</p>`;
+}
+
+function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// IMPORT
+// ============================================================
+function importData() {
+    if (!isLoggedIn()) return;
+    const fileInput = document.getElementById('import-file');
+    const file      = fileInput.files[0];
+    if (!file) { alert('Please select a file to import.'); return; }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            let imported;
+            if (file.name.endsWith('.json')) {
+                imported = JSON.parse(e.target.result);
+            } else if (file.name.endsWith('.csv')) {
+                const lines   = e.target.result.split('\n').filter(l => l.trim());
+                const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+                imported = lines.slice(1).map(line => {
+                    const vals = line.split(',').map(v => v.replace(/"/g, '').trim());
+                    const obj  = {};
+                    headers.forEach((h, i) => { obj[h.toLowerCase().replace(/\s+/g, '')] = vals[i] || ''; });
+                    return obj;
+                });
+            } else { throw new Error('Unsupported format. Use JSON or CSV.'); }
+
+            const valid = imported.filter(m => m.name && m.email && (m.studentId || m.studentid));
+            if (!valid.length) { alert('No valid member data found.'); return; }
+
+            const existing       = getMembers();
+            const existingEmails = new Set(existing.map(m => m.email));
+            const existingIds    = new Set(existing.map(m => m.studentId));
+            const toAdd = valid.filter(m => !existingEmails.has(m.email) && !existingIds.has(m.studentId || m.studentid));
+            if (!toAdd.length) { alert('All imported members already exist.'); return; }
+
+            toAdd.forEach(m => {
+                const sid = m.studentId || m.studentid || '';
+                if (!m.memberNumber) m.memberNumber = deriveMemberNumber(sid);
+                if (!m.dateAdded)    m.dateAdded    = new Date().toISOString();
+                if (!m.studentId)    m.studentId    = sid;
+            });
+            saveMembers([...existing, ...toAdd]);
+            loadMembers();
+            alert(`Imported ${toAdd.length} new member(s).`);
+            fileInput.value = '';
+        } catch (err) { alert('Import error: ' + err.message); }
+    };
+    reader.readAsText(file);
+}
+
+// ============================================================
+// CONFIRMATION MODAL
+// ============================================================
 let _pendingConfirm = null;
 function showConfirmModal(message, onConfirm) {
-    const modal = document.getElementById('confirm-modal');
-    const msg = document.getElementById('confirm-message');
-    const ok = document.getElementById('confirm-ok');
+    const modal  = document.getElementById('confirm-modal');
+    const msg    = document.getElementById('confirm-message');
+    const ok     = document.getElementById('confirm-ok');
     const cancel = document.getElementById('confirm-cancel');
     msg.textContent = message;
     modal.setAttribute('aria-hidden', 'false');
     _pendingConfirm = onConfirm;
-
-    const done = () => {
-        modal.setAttribute('aria-hidden', 'true');
-        ok.removeEventListener('click', onOk);
-        cancel.removeEventListener('click', onCancel);
-        _pendingConfirm = null;
-    };
-    const onOk = () => { if (_pendingConfirm) _pendingConfirm(); done(); };
-    const onCancel = () => { done(); };
+    const done     = () => { modal.setAttribute('aria-hidden', 'true'); ok.removeEventListener('click', onOk); cancel.removeEventListener('click', onCancel); _pendingConfirm = null; };
+    const onOk     = () => { if (_pendingConfirm) _pendingConfirm(); done(); };
+    const onCancel = () => done();
     ok.addEventListener('click', onOk);
     cancel.addEventListener('click', onCancel);
 }
 
-// Soft-delete with undo
-function performSoftDelete(memberNumbers) {
-    if (!Array.isArray(memberNumbers) || memberNumbers.length === 0) return;
-    const members = getMembers();
-    const toDelete = members.filter(m => memberNumbers.includes(m.memberNumber));
-    if (toDelete.length === 0) return;
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+    const panel  = document.getElementById(tabName);
+    const button = document.querySelector(`[data-tab="${tabName}"]`);
+    if (panel)  panel.classList.add('active');
+    if (button) button.classList.add('active');
+}
 
-    const remaining = members.filter(m => !memberNumbers.includes(m.memberNumber));
-    saveMembers(remaining);
-
-    // Save last-deleted to localStorage with expiry
-    const expiry = Date.now() + 8000; // 8 seconds to undo
-    localStorage.setItem('esa-last-deleted', JSON.stringify({ members: toDelete, expiry }));
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+    applyAuthState();
     loadMembers();
-    showUndoSnackbar(`${toDelete.length} member(s) deleted.`, 8000);
-    schedulePendingUndoExpiry();
-}
 
-function schedulePendingUndoExpiry() {
-    const raw = localStorage.getItem('esa-last-deleted');
-    if (!raw) return;
-    let obj;
-    try { obj = JSON.parse(raw); } catch { localStorage.removeItem('esa-last-deleted'); return; }
-    const ms = obj.expiry - Date.now();
-    if (ms <= 0) { localStorage.removeItem('esa-last-deleted'); hideUndoSnackbar(); return; }
-    if (window._esaUndoTimer) clearTimeout(window._esaUndoTimer);
-    window._esaUndoTimer = setTimeout(() => {
-        localStorage.removeItem('esa-last-deleted');
-        hideUndoSnackbar();
-    }, ms);
-}
+    document.getElementById('member-form').addEventListener('submit', addMember);
+    document.getElementById('export-csv').addEventListener('click', exportCSV);
+    document.getElementById('export-json').addEventListener('click', exportJSON);
+    document.getElementById('export-xlsx').addEventListener('click', exportXLSX);
+    document.getElementById('quick-backup').addEventListener('click', quickBackup);
+    document.getElementById('import-btn').addEventListener('click', importData);
+    document.getElementById('bulk-add').addEventListener('click', bulkAddMembers);
+    document.getElementById('undo-btn').addEventListener('click', undoDelete);
 
-function checkPendingUndo() {
-    const raw = localStorage.getItem('esa-last-deleted');
-    if (!raw) return;
-    let obj;
-    try { obj = JSON.parse(raw); } catch { localStorage.removeItem('esa-last-deleted'); return; }
-    const ms = obj.expiry - Date.now();
-    if (ms <= 0) { localStorage.removeItem('esa-last-deleted'); return; }
-    showUndoSnackbar(`${obj.members.length} member(s) deleted.`, ms);
-    schedulePendingUndoExpiry();
-}
+    // Auth
+    document.getElementById('login-btn').addEventListener('click', openLoginModal);
+    document.getElementById('logout-btn').addEventListener('click', () => { sessionStorage.removeItem('esa-auth'); applyAuthState(); });
+    document.getElementById('login-submit').addEventListener('click', loginUser);
+    document.getElementById('login-cancel').addEventListener('click', closeLoginModal);
+    document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') loginUser(); });
 
-function showUndoSnackbar(message, durationMs) {
-    const sb = document.getElementById('undo-snackbar');
-    const msg = document.getElementById('undo-message');
-    const btn = document.getElementById('undo-btn');
-    msg.textContent = message;
-    sb.style.display = 'flex';
-    btn.onclick = () => { undoDelete(); };
-}
+    // Edit modal
+    document.getElementById('edit-save').addEventListener('click', saveEditMember);
+    document.getElementById('edit-cancel').addEventListener('click', closeEditModal);
 
-function hideUndoSnackbar() {
-    const sb = document.getElementById('undo-snackbar');
-    if (sb) sb.style.display = 'none';
-}
+    // Search
+    const searchInput = document.getElementById('member-search');
+    searchInput.addEventListener('input', () => renderMemberList(getMembers()));
+    document.getElementById('search-clear').addEventListener('click', () => { searchInput.value = ''; renderMemberList(getMembers()); });
 
-function undoDelete() {
-    const raw = localStorage.getItem('esa-last-deleted');
-    if (!raw) return;
-    let obj;
-    try { obj = JSON.parse(raw); } catch { localStorage.removeItem('esa-last-deleted'); hideUndoSnackbar(); return; }
-    const members = getMembers();
-    const merged = [...members, ...obj.members];
-    saveMembers(merged);
-    localStorage.removeItem('esa-last-deleted');
-    if (window._esaUndoTimer) clearTimeout(window._esaUndoTimer);
-    hideUndoSnackbar();
-    initMemberCounter();
-    loadMembers();
-}
+    // Tabs
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    switchTab('member-list');
+});
