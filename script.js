@@ -73,13 +73,32 @@ function loginUser() {
 
 // ============================================================
 // MEMBER NUMBER — derived from student ID
-// J174/6153/2025 → ESA-6153
+// J174/10483/2025 → ESA-10483
+// J79/1417/2025   → ESA-1417
 // ============================================================
 function deriveMemberNumber(studentId) {
     const parts = studentId.trim().split('/');
     if (parts.length >= 3) return `ESA-${parts[1].trim()}`;
     if (parts.length === 2) return `ESA-${parts[1].trim()}`;
     return `ESA-${studentId.replace(/[^a-zA-Z0-9]/g, '')}`;
+}
+
+// One-time migration: re-derive member numbers for any record
+// that has an old counter-based number (ESA-KU-0001, 0002, etc.)
+// or any number that doesn't match the derived value.
+function migrateMemberNumbers() {
+    const members = getMembers();
+    if (!members.length) return;
+    let changed = false;
+    members.forEach(m => {
+        if (!m.studentId) return;
+        const correct = deriveMemberNumber(m.studentId);
+        if (m.memberNumber !== correct) {
+            m.memberNumber = correct;
+            changed = true;
+        }
+    });
+    if (changed) saveMembers(members);
 }
 
 // ============================================================
@@ -557,6 +576,7 @@ function switchTab(tabName) {
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
+    migrateMemberNumbers(); // fix any old ESA-KU-0001 style numbers
     applyAuthState();
     loadMembers();
 
