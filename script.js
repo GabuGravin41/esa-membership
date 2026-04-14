@@ -4,7 +4,7 @@
 // ============================================================
 
 // Change this password before sharing the link.
-const COMMITTEE_PASSWORD = 'ESA-KU-2026';
+const COMMITTEE_PASSWORD = 'esa@2026';
 
 // ============================================================
 // MODULE STATE
@@ -47,12 +47,11 @@ function applyAuthState() {
 
 function openLoginModal() {
     document.getElementById('login-modal').setAttribute('aria-hidden', 'false');
-    document.getElementById('login-email').focus();
+    document.getElementById('login-password').focus();
 }
 function closeLoginModal() {
     document.getElementById('login-modal').setAttribute('aria-hidden', 'true');
-    document.getElementById('login-email').value    = '';
-    document.getElementById('login-password').value = '';
+    document.getElementById('login-password').value    = '';
     document.getElementById('login-error').textContent = '';
 }
 
